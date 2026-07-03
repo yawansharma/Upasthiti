@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'dart:io';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
@@ -39,14 +39,23 @@ class _RegisterPageState extends State<RegisterPage> {
     "School of Arts, Sciences, Humanities & Education (SASHE)"
   ];
 
+  String? _selectedSecurityQuestion;
+  final securityAnswerController = TextEditingController();
+  final List<String> _securityQuestions = [
+    "What is your mother's maiden name?",
+    "What was the name of your first pet?",
+    "In what city were you born?",
+    "What is your favorite book?",
+    "What high school did you attend?"
+  ];
+
   File? _localPhoto;
   double? latitude;
   double? longitude;
   bool _fetchingLocation = false;
   bool _registeringFace = false;
 
-  static const String _backendBaseUrl = "https://pasteshub404-navikarana-backend.hf.space";
-  static const String _registerFaceEndpoint = "$_backendBaseUrl/register-face";
+  static const String _registerFaceEndpoint = "${AppwriteService.mlBackendBase}/register-face";
 
 
   @override
@@ -92,6 +101,58 @@ class _RegisterPageState extends State<RegisterPage> {
                       trailing: isSelected ? const Icon(Icons.check_circle, color: AppTheme.kGreen) : null,
                       onTap: () {
                         setState(() => _selectedSchool = school);
+                        Navigator.pop(context);
+                      },
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // --- NEW UX: SECURITY QUESTION SELECTOR ---
+  void _showSecurityQuestionPicker() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+      ),
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40, height: 4,
+                decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
+              ),
+              const SizedBox(height: 20),
+              const Text("Select a Security Question", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 10),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _securityQuestions.length,
+                  itemBuilder: (context, index) {
+                    final question = _securityQuestions[index];
+                    final isSelected = _selectedSecurityQuestion == question;
+                    return ListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 30),
+                      title: Text(question, style: TextStyle(
+                        fontSize: 14, 
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                        color: isSelected ? AppTheme.kGreen : Colors.black87
+                      )),
+                      trailing: isSelected ? const Icon(Icons.check_circle, color: AppTheme.kGreen) : null,
+                      onTap: () {
+                        setState(() => _selectedSecurityQuestion = question);
                         Navigator.pop(context);
                       },
                     );
@@ -161,41 +222,72 @@ class _RegisterPageState extends State<RegisterPage> {
 
   Future<String?> _registerFaceOnBackend() async {
     if (_localPhoto == null) return "No photo selected.";
-    try {
-      final request = http.MultipartRequest('POST', Uri.parse(_registerFaceEndpoint));
-      request.fields['username'] = uniqueCodeController.text.trim();
-      request.files.add(await http.MultipartFile.fromPath('image', _localPhoto!.path));
-      final streamedResponse = await request.send();
-      final responseBody = await streamedResponse.stream.bytesToString();
-      if (streamedResponse.statusCode == 200) return null;
+
+    // Retry logic for Hugging Face cold starts
+    const maxAttempts = 3;
+    const initialDelay = Duration(seconds: 3);
+
+    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        final decoded = jsonDecode(responseBody) as Map<String, dynamic>;
-        return decoded['error'] as String? ?? "Face registration failed.";
-      } catch (_) {
-        return "Face registration failed (status ${streamedResponse.statusCode}).";
+        final request = http.MultipartRequest('POST', Uri.parse(_registerFaceEndpoint));
+        request.fields['username'] = uniqueCodeController.text.trim();
+        request.files.add(await http.MultipartFile.fromPath('image', _localPhoto!.path));
+
+        if (mounted && attempt > 1) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('AI model warming up… Retry $attempt/$maxAttempts'),
+            duration: const Duration(seconds: 2),
+          ));
+        }
+
+        final streamedResponse = await request.send().timeout(
+          const Duration(seconds: 60),
+        );
+        final responseBody = await streamedResponse.stream.bytesToString();
+        if (streamedResponse.statusCode == 200) return null;
+
+        // If it's a 5xx (server cold start), retry
+        if (streamedResponse.statusCode >= 500 && attempt < maxAttempts) {
+          await Future.delayed(initialDelay * attempt);
+          continue;
+        }
+
+        try {
+          final decoded = jsonDecode(responseBody) as Map<String, dynamic>;
+          return decoded['error'] as String? ?? "Face registration failed.";
+        } catch (_) {
+          return "Face registration failed (status ${streamedResponse.statusCode}).";
+        }
+      } catch (e) {
+        if (attempt < maxAttempts) {
+          await Future.delayed(initialDelay * attempt);
+          continue;
+        }
+        return "Could not reach the server. Please check your connection.";
       }
-    } catch (e) {
-      return "Could not reach the server. Please check your connection.";
     }
+    return "Face registration failed after $maxAttempts attempts.";
   }
 
   Future<void> _registerUserInAppwrite(String? profilePicId) async {
   final data = {
     'name': nameController.text.trim(),
     'username': uniqueCodeController.text.trim(),
-    'password': passwordController.text.trim(),
+    'password': AppwriteService.hashPassword(passwordController.text.trim()),
     'department': _selectedSchool,
     'latitude': latitude,
     'longitude': longitude,
     'status': 'pending',
     'role': 'student',
+    'securityQuestion': _selectedSecurityQuestion,
+    'securityAnswer': securityAnswerController.text.trim(),
   };
   if (profilePicId != null) {
     data['profilePictureId'] = profilePicId;
   }
 
   await AppwriteService.databases.createDocument(
-    databaseId: '6a2c10dc000d5e50f314',
+    databaseId: AppwriteService.databaseId,
     collectionId: 'users',
     documentId: ID.unique(),
     data: data,
@@ -206,15 +298,26 @@ class _RegisterPageState extends State<RegisterPage> {
     if (_localPhoto == null) { _showSnackBar("Please add a photo first."); return; }
     if (latitude == null || longitude == null) { _showSnackBar("Please fetch your location first."); return; }
     if (passwordController.text != confirmPasswordController.text) { _showSnackBar("Passwords do not match."); return; }
-    if (_selectedSchool == null) { _showSnackBar("Please select your school."); return; }
+    if (_selectedSchool == null) {
+      _showSnackBar("Please select your department/school.");
+      return;
+    }
+    if (_selectedSecurityQuestion == null) {
+      _showSnackBar("Please select a security question.");
+      return;
+    }
+    if (securityAnswerController.text.trim().isEmpty) {
+      _showSnackBar("Please provide an answer to your security question.");
+      return;
+    }
 
     final existingUser = await AppwriteService.databases.listDocuments(
-  databaseId: '6a2c10dc000d5e50f314',
-  collectionId: 'users',
-  queries: [
-    Query.equal('username', uniqueCodeController.text.trim()),
-  ],
-);
+      databaseId: AppwriteService.databaseId,
+      collectionId: 'users',
+      queries: [
+        Query.equal('username', uniqueCodeController.text.trim()),
+      ],
+    );
     if (existingUser.documents.isNotEmpty) { _showSnackBar("Unique ID already exists."); return; }
 
     setState(() => _registeringFace = true);
@@ -232,7 +335,7 @@ class _RegisterPageState extends State<RegisterPage> {
         final extension = _localPhoto!.path.split('.').last.toLowerCase();
         final filename = 'profile_${uniqueCodeController.text.trim()}_${DateTime.now().millisecondsSinceEpoch}.$extension';
         final uploadedFile = await AppwriteService.storage.createFile(
-          bucketId: '6a2c12a500260c940843',
+          bucketId: AppwriteService.profileBucketId,
           fileId: ID.unique(),
           file: InputFile.fromBytes(
             bytes: bytes,
@@ -459,6 +562,30 @@ class _RegisterPageState extends State<RegisterPage> {
                                       ),
                                     ),
                                   ),
+                                ),
+                                
+                                _sectionTitle("ACCOUNT RECOVERY"),
+                                GestureDetector(
+                                  onTap: _showSecurityQuestionPicker,
+                                  child: AbsorbPointer(
+                                    child: TextFormField(
+                                      decoration: AppTheme.inputDecoration(
+                                        _selectedSecurityQuestion ?? "Select Security Question", 
+                                        Icons.help_outline, 
+                                        isDropdown: true,
+                                      ),
+                                      style: GoogleFonts.poppins(
+                                        color: _selectedSecurityQuestion == null ? Colors.grey : Colors.black,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                TextFormField(
+                                  controller: securityAnswerController, 
+                                  textInputAction: TextInputAction.next,
+                                  decoration: AppTheme.inputDecoration("Your Answer", Icons.key_outlined),
                                 ),
                                 
                                 _sectionTitle("IDENTITY CHECK"),

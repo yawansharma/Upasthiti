@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import 'package:appwrite/models.dart' as models;
 import 'package:google_fonts/google_fonts.dart';
@@ -25,7 +25,7 @@ class _AdminApprovalRequestsPageState extends State<AdminApprovalRequestsPage> {
     super.initState();
     _fetchRequests();
     _sub = AppwriteService.realtime
-        .subscribe(['databases.6a2c10dc000d5e50f314.collections.users.documents']);
+        .subscribe(['databases.${AppwriteService.databaseId}.collections.users.documents']);
     _sub!.stream.listen((_) {
       if (mounted) _fetchRequests();
     });
@@ -41,7 +41,7 @@ class _AdminApprovalRequestsPageState extends State<AdminApprovalRequestsPage> {
     try {
       // In-memory filter fallback approach for safety if index is missing
       final result = await AppwriteService.databases.listDocuments(
-        databaseId: '6a2c10dc000d5e50f314',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'users',
         queries: [
           Query.limit(5000), // Get recent users and filter
@@ -68,7 +68,7 @@ class _AdminApprovalRequestsPageState extends State<AdminApprovalRequestsPage> {
   Future<void> _approveRequest(models.Document doc) async {
     try {
       await AppwriteService.databases.updateDocument(
-        databaseId: '6a2c10dc000d5e50f314',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'users',
         documentId: doc.$id,
         data: {'status': 'active'},
@@ -112,7 +112,7 @@ class _AdminApprovalRequestsPageState extends State<AdminApprovalRequestsPage> {
     if (confirm == true) {
       try {
         await AppwriteService.databases.deleteDocument(
-          databaseId: '6a2c10dc000d5e50f314',
+          databaseId: AppwriteService.databaseId,
           collectionId: 'users',
           documentId: doc.$id,
         );

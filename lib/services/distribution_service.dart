@@ -1,4 +1,4 @@
-﻿// SETUP: Create these collections in Appwrite Console (database 6a2c10dc000d5e50f314)
+// SETUP: Create these collections in Appwrite Console (database 6a2c10dc000d5e50f314)
 //
 // distribution_events:
 //   title(String), description(String), scheduledDate(String), location(String),
@@ -47,7 +47,7 @@ class ScanResult {
 }
 
 class DistributionService {
-  static const String _db = '6a2c10dc000d5e50f314';
+  static String get _db => AppwriteService.databaseId;
   static const String _events = 'distribution_events';
   static const String _recipients = 'event_recipients';
   static const String _assignments = 'event_admin_assignments';

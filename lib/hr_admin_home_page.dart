@@ -16,7 +16,7 @@ import 'services/leave_service.dart';
 import 'components/user_avatar.dart';
 
 const Color _kHRAccent = Color(0xFF8A7A2A);
-const String _kDb = '6a2c10dc000d5e50f314';
+final String _kDb = AppwriteService.databaseId;
 
 class HrAdminHomePage extends StatefulWidget {
   final String adminName;

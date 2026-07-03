@@ -1,7 +1,9 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
+import 'package:appwrite/appwrite.dart';
 import 'main.dart'; // Import main to navigate back
 import 'dean_home_page.dart';
 import 'app_theme.dart';
+import 'services/appwrite_service.dart';
 
 class DeanLoginPage extends StatefulWidget {
   const DeanLoginPage({super.key});
@@ -22,7 +24,7 @@ class _DeanLoginPageState extends State<DeanLoginPage> {
     super.dispose();
   }
 
-  // Ã°Å¸â€Â DEAN LOGIN LOGIC (Hardcoded for maximum security as requested)
+  // 🔐 DEAN LOGIN LOGIC — Now backed by Appwrite database
   Future<void> _login() async {
     final deanId = usernameController.text.trim();
     final password = passwordController.text.trim();
@@ -68,19 +70,64 @@ class _DeanLoginPageState extends State<DeanLoginPage> {
       ),
     );
 
-    // Simulate network delay for effect
-    await Future.delayed(const Duration(seconds: 1));
+    try {
+      // Query Appwrite for dean-role users
+      final result = await AppwriteService.databases.listDocuments(
+        databaseId: AppwriteService.databaseId,
+        collectionId: 'users',
+        queries: [
+          Query.equal('username', deanId),
+          Query.equal('role', 'dean'),
+        ],
+      );
 
-    if (!mounted) return;
-    Navigator.of(context).pop();
+      if (!mounted) return;
+      Navigator.of(context).pop();
 
-    if (deanId == "dean" && password == "dean123") {
+      if (result.documents.isEmpty) {
+        _showError("Invalid Executive Credentials.");
+        return;
+      }
+
+      final doc = result.documents.first;
+      final storedPassword = doc.data['password'] as String? ?? '';
+
+      // Dual-mode password verification
+      if (!AppwriteService.verifyPassword(password, storedPassword)) {
+        _showError("Invalid Executive Credentials.");
+        return;
+      }
+
+      // Auto-upgrade plaintext password to hashed
+      final updateData = <String, dynamic>{
+        'lastLogin': DateTime.now().toIso8601String(),
+      };
+      if (!AppwriteService.isHashed(storedPassword)) {
+        updateData['password'] = AppwriteService.hashPassword(password);
+      }
+      try {
+        await AppwriteService.databases.updateDocument(
+          databaseId: AppwriteService.databaseId,
+          collectionId: 'users',
+          documentId: doc.$id,
+          data: updateData,
+        );
+      } catch (_) {
+        // Non-critical — login still succeeds even if update fails
+      }
+      // Trigger lazy background cleanup of old accounts
+      AppwriteService.cleanupInactiveAccounts();
+
+      if (!mounted) return;
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const DeanHomePage()),
       );
-    } else {
-      _showError("Invalid Executive Credentials.");
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context).pop();
+        _showError("Login failed: ${e.toString()}");
+      }
     }
   }
 

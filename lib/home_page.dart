@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
@@ -41,7 +41,7 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     _fetchClasses();
     _sub = AppwriteService.realtime
-        .subscribe(['databases.6a2c10dc000d5e50f314.collections.classes.documents']);
+        .subscribe(['databases.${AppwriteService.databaseId}.collections.classes.documents']);
     _sub!.stream.listen((_) {
       if (mounted) _fetchClasses();
     });
@@ -56,13 +56,13 @@ class _HomePageState extends State<HomePage> {
   Future<void> _fetchClasses() async {
     try {
       final result = await AppwriteService.databases.listDocuments(
-        databaseId: '6a2c10dc000d5e50f314',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'classes',
         queries: [Query.contains('studentIds', widget.username)],
       );
 
       final userResult = await AppwriteService.databases.listDocuments(
-        databaseId: '6a2c10dc000d5e50f314',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'users',
         queries: [Query.equal('username', widget.username)],
       );
@@ -88,7 +88,7 @@ class _HomePageState extends State<HomePage> {
         Set<String> adminUsernames = {};
         if (dept != null && dept.isNotEmpty) {
           final adminResult = await AppwriteService.databases.listDocuments(
-            databaseId: '6a2c10dc000d5e50f314',
+            databaseId: AppwriteService.databaseId,
             collectionId: 'users',
             queries: [
               Query.equal('role', 'admin'),
@@ -103,7 +103,7 @@ class _HomePageState extends State<HomePage> {
         }
 
         final allClassesResult = await AppwriteService.databases.listDocuments(
-          databaseId: '6a2c10dc000d5e50f314',
+          databaseId: AppwriteService.databaseId,
           collectionId: 'classes',
           queries: [Query.limit(500)],
         );
@@ -256,7 +256,7 @@ class _HomePageState extends State<HomePage> {
 
               try {
                 final classQuery = await AppwriteService.databases.listDocuments(
-                  databaseId: '6a2c10dc000d5e50f314',
+                  databaseId: AppwriteService.databaseId,
                   collectionId: 'classes',
                   queries: [Query.equal('classCode', code)],
                 );
@@ -326,7 +326,7 @@ class _HomePageState extends State<HomePage> {
       boundary['rejectedStudents'] = rejected;
 
       await AppwriteService.databases.updateDocument(
-        databaseId: '6a2c10dc000d5e50f314',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'classes',
         documentId: classId,
         data: {'boundary': jsonEncode(boundary)},
@@ -352,7 +352,7 @@ class _HomePageState extends State<HomePage> {
       boundary['pendingStudents'] = pending;
 
       await AppwriteService.databases.updateDocument(
-        databaseId: '6a2c10dc000d5e50f314',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'classes',
         documentId: classId,
         data: {'boundary': jsonEncode(boundary)},
@@ -383,7 +383,7 @@ class _HomePageState extends State<HomePage> {
       }
 
       await AppwriteService.databases.updateDocument(
-        databaseId: '6a2c10dc000d5e50f314',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'classes',
         documentId: classId,
         data: {
@@ -412,7 +412,7 @@ class _HomePageState extends State<HomePage> {
       boundary['invitedStudents'] = invited;
 
       await AppwriteService.databases.updateDocument(
-        databaseId: '6a2c10dc000d5e50f314',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'classes',
         documentId: classId,
         data: {'boundary': jsonEncode(boundary)},
@@ -1166,7 +1166,7 @@ class _ActivePeriodsBannerState extends State<_ActivePeriodsBanner> {
     super.initState();
     _fetchAllPeriods();
     _sub = AppwriteService.realtime
-        .subscribe(['databases.6a2c10dc000d5e50f314.collections.periods.documents']);
+        .subscribe(['databases.${AppwriteService.databaseId}.collections.periods.documents']);
     _sub!.stream.listen((_) {
       if (mounted) _fetchAllPeriods();
     });
@@ -1197,7 +1197,7 @@ class _ActivePeriodsBannerState extends State<_ActivePeriodsBanner> {
 
       try {
         final result = await AppwriteService.databases.listDocuments(
-          databaseId: '6a2c10dc000d5e50f314',
+          databaseId: AppwriteService.databaseId,
           collectionId: 'periods',
           queries: [
             Query.equal('classId', classId),

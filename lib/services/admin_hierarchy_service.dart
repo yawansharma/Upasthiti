@@ -24,7 +24,7 @@ class ClassAssignments {
 }
 
 class AdminHierarchyService {
-  static const String databaseId = '6a2c10dc000d5e50f314';
+  static String get databaseId => AppwriteService.databaseId;
   static const String usersCollection = 'users';
   static const String classesCollection = 'classes';
 

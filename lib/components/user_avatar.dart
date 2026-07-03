@@ -1,4 +1,4 @@
-﻿import 'dart:typed_data';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../services/appwrite_service.dart';
 
@@ -61,7 +61,7 @@ class _UserAvatarState extends State<UserAvatar> {
 
     try {
       final bytes = await AppwriteService.storage.getFileView(
-        bucketId: '6a2c12a500260c940843',
+        bucketId: AppwriteService.profileBucketId,
         fileId: widget.profilePictureId!,
       );
       if (mounted) {

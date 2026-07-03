@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import 'package:appwrite/models.dart' as models;
@@ -41,7 +41,7 @@ class _AdminStudentDirectoryPageState extends State<AdminStudentDirectoryPage> {
   Future<void> _fetchStudents() async {
     try {
       final result = await AppwriteService.databases.listDocuments(
-        databaseId: '6a2c10dc000d5e50f314',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'users',
         queries: [
           Query.limit(5000),
@@ -136,7 +136,7 @@ class _AdminStudentDirectoryPageState extends State<AdminStudentDirectoryPage> {
         boundary['invitedStudents'] = invited;
         
         await AppwriteService.databases.updateDocument(
-          databaseId: '6a2c10dc000d5e50f314',
+          databaseId: AppwriteService.databaseId,
           collectionId: 'classes',
           documentId: selectedClass.$id,
           data: {

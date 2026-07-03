@@ -10,6 +10,8 @@ import 'package:excel/excel.dart' hide Border, Center;
 import 'package:path_provider/path_provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 
 import 'app_theme.dart';
 import 'services/appwrite_service.dart';
@@ -18,9 +20,9 @@ import 'office_admin_student_attendance_page.dart';
 import 'main.dart';
 
 const _kOAAccent = Color(0xFF8A6A6A);
-const _kDb = '6a2c10dc000d5e50f314';
-const _kProfileBucket = '6a2c12a500260c940843';
-const _kFaceBase = 'https://pasteshub404-navikarana-backend.hf.space';
+final _kDb = AppwriteService.databaseId;
+final _kProfileBucket = AppwriteService.profileBucketId;
+const _kFaceBase = AppwriteService.mlBackendBase;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shell
@@ -429,10 +431,25 @@ class _StudentsTabState extends State<_StudentsTab> {
   bool _loading = true;
   String _search = '';
 
+  final ScrollController _scrollController = ScrollController();
+  bool _isLoadingMore = false;
+  bool _hasMore = true;
+
   @override
   void initState() {
     super.initState();
     _fetchStudents();
+    _scrollController.addListener(() {
+      if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+        _loadMore();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _fetchStudents() async {
@@ -445,17 +462,47 @@ class _StudentsTabState extends State<_StudentsTab> {
           Query.equal('status', 'active'),
           if (widget.department.isNotEmpty)
             Query.equal('department', widget.department),
-          Query.limit(5000),
+          Query.limit(25),
         ],
       );
       if (mounted) {
         setState(() {
           _students = result.documents;
+          _hasMore = result.documents.length == 25;
           _loading = false;
         });
       }
     } catch (_) {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_isLoadingMore || !_hasMore || _students.isEmpty) return;
+    setState(() => _isLoadingMore = true);
+    try {
+      final lastId = _students.last.$id;
+      final result = await AppwriteService.databases.listDocuments(
+        databaseId: _kDb,
+        collectionId: 'users',
+        queries: [
+          Query.equal('role', 'student'),
+          Query.equal('status', 'active'),
+          if (widget.department.isNotEmpty)
+            Query.equal('department', widget.department),
+          Query.limit(25),
+          Query.cursorAfter(lastId),
+        ],
+      );
+      if (mounted) {
+        setState(() {
+          _students.addAll(result.documents);
+          _hasMore = result.documents.length == 25;
+          _isLoadingMore = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingMore = false);
     }
   }
 
@@ -526,11 +573,19 @@ class _StudentsTabState extends State<_StudentsTab> {
                         color: _kOAAccent,
                         onRefresh: _fetchStudents,
                         child: ListView.builder(
+                          controller: _scrollController,
                           padding:
                               const EdgeInsets.fromLTRB(20, 4, 20, 24),
-                          itemCount: _filtered.length,
-                          itemBuilder: (ctx, i) =>
-                              _buildStudentCard(_filtered[i]),
+                          itemCount: _filtered.length + (_isLoadingMore ? 1 : 0),
+                          itemBuilder: (ctx, i) {
+                            if (i == _filtered.length) {
+                              return const Padding(
+                                padding: EdgeInsets.all(16.0),
+                                child: Center(child: CircularProgressIndicator(color: _kOAAccent)),
+                              );
+                            }
+                            return _buildStudentCard(_filtered[i]);
+                          },
                         ),
                       ),
           ),
@@ -802,7 +857,7 @@ class _ReportsTabState extends State<_ReportsTab> {
 
       final dir = await getApplicationDocumentsDirectory();
       final ts = DateTime.now().millisecondsSinceEpoch;
-      String savedPath;
+      String savedPath = '';
 
       if (format == 'csv') {
         const conv = ListToCsvConverter();
@@ -810,7 +865,7 @@ class _ReportsTabState extends State<_ReportsTab> {
         final file = File('${dir.path}/attendance_$ts.csv');
         await file.writeAsString(csv);
         savedPath = file.path;
-      } else {
+      } else if (format == 'excel') {
         final excel = Excel.createExcel();
         final sheet = excel['Attendance'];
         // Header row with bold style
@@ -833,6 +888,35 @@ class _ReportsTabState extends State<_ReportsTab> {
         final bytes = excel.save()!;
         final file = File('${dir.path}/attendance_$ts.xlsx');
         await file.writeAsBytes(bytes);
+        savedPath = file.path;
+      } else if (format == 'pdf') {
+        final pdf = pw.Document();
+        pdf.addPage(
+          pw.MultiPage(
+            pageFormat: PdfPageFormat.a4.landscape,
+            margin: const pw.EdgeInsets.all(32),
+            build: (pw.Context context) {
+              return [
+                pw.Header(
+                  level: 0,
+                  child: pw.Text("Attendance Report", style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
+                ),
+                pw.SizedBox(height: 20),
+                pw.TableHelper.fromTextArray(
+                  context: context,
+                  data: <List<String>>[columns, ...rows],
+                  headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10),
+                  headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey),
+                  cellStyle: const pw.TextStyle(fontSize: 9),
+                  rowDecoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5))),
+                  cellAlignment: pw.Alignment.centerLeft,
+                ),
+              ];
+            },
+          ),
+        );
+        final file = File('${dir.path}/attendance_$ts.pdf');
+        await file.writeAsBytes(await pdf.save());
         savedPath = file.path;
       }
 
@@ -1095,6 +1179,25 @@ class _ReportsTabState extends State<_ReportsTab> {
                   ),
                   icon: const Icon(Icons.file_present_outlined, size: 20),
                   label: Text("Export as Excel",
+                      style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.bold, fontSize: 15)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => _export('pdf'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFD32F2F),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    elevation: 0,
+                  ),
+                  icon: const Icon(Icons.picture_as_pdf_outlined, size: 20),
+                  label: Text("Export as PDF",
                       style: GoogleFonts.poppins(
                           fontWeight: FontWeight.bold, fontSize: 15)),
                 ),

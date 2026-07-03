@@ -353,7 +353,7 @@ None. All operations are synchronous request/response or live Realtime subscript
 ### Appwrite
 ```
 Endpoint:   https://sgp.cloud.appwrite.io/v1
-Project ID: 69ecea2600127cefd5b2
+Project ID: 6a2c0bd800121a164e77
 Database ID: 6a2c10dc000d5e50f314
 Profile/File Bucket: 6a2c12a500260c940843
 ```

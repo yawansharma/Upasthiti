@@ -43,7 +43,7 @@ class _AdminDistributionTabState extends State<AdminDistributionTab> {
     super.initState();
     _fetchAllEvents();
     _sub = AppwriteService.realtime.subscribe([
-      'databases.6a2c10dc000d5e50f314.collections.distribution_events.documents',
+      'databases.${AppwriteService.databaseId}.collections.distribution_events.documents',
     ]);
     _sub!.stream.listen((_) {
       if (mounted) _fetchAllEvents();
@@ -1008,7 +1008,7 @@ class _AdminEventDetailSheetState extends State<_AdminEventDetailSheet> {
           "Adding recipients (${i + 1} / ${usernames.length})...";
       try {
         final userQuery = await AppwriteService.databases.listDocuments(
-          databaseId: '6a2c10dc000d5e50f314',
+          databaseId: AppwriteService.databaseId,
           collectionId: 'users',
           queries: [Query.equal('username', uid), Query.limit(1)],
         );
@@ -1100,7 +1100,7 @@ class _AdminEventDetailSheetState extends State<_AdminEventDetailSheet> {
                     try {
                       final byName = await AppwriteService.databases
                           .listDocuments(
-                            databaseId: '6a2c10dc000d5e50f314',
+                            databaseId: AppwriteService.databaseId,
                             collectionId: 'users',
                             queries: [
                               Query.startsWith('name', q.trim()),
@@ -1109,7 +1109,7 @@ class _AdminEventDetailSheetState extends State<_AdminEventDetailSheet> {
                           );
                       final byId = await AppwriteService.databases
                           .listDocuments(
-                            databaseId: '6a2c10dc000d5e50f314',
+                            databaseId: AppwriteService.databaseId,
                             collectionId: 'users',
                             queries: [
                               Query.startsWith('username', q.trim()),
@@ -1219,7 +1219,7 @@ class _AdminEventDetailSheetState extends State<_AdminEventDetailSheet> {
             Future(() async {
               try {
                 final r = await AppwriteService.databases.listDocuments(
-                  databaseId: '6a2c10dc000d5e50f314',
+                  databaseId: AppwriteService.databaseId,
                   collectionId: 'users',
                   queries: [Query.equal('role', 'admin'), Query.limit(50)],
                 );

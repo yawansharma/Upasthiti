@@ -1,4 +1,4 @@
-﻿import 'dart:math'; // For Random Captcha
+import 'dart:math'; // For Random Captcha
 import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import 'admin_home_page.dart';
@@ -162,13 +162,12 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
     );
 
     try {
-      // Use Appwrite query instead of Firestore
+      // Query by username only — password verified client-side for dual-mode support
       final query = await AppwriteService.databases.listDocuments(
-        databaseId: '6a2c10dc000d5e50f314',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'users',
         queries: [
           Query.equal('username', adminId),
-          Query.equal('password', password),
         ],
       );
 
@@ -180,6 +179,14 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
 
       final doc = query.documents.first;
       final data = doc.data;
+
+      // Dual-mode password verification (supports plaintext legacy + hashed)
+      final storedPassword = data['password'] as String? ?? '';
+      if (!AppwriteService.verifyPassword(password, storedPassword)) {
+        _dismissAndShowError("Invalid Admin ID or Password");
+        _generateCaptcha();
+        return;
+      }
 
       final role = data['role'] as String?;
       final adminName = data['name'] ?? adminId;
@@ -196,12 +203,22 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
           return;
         }
         statusText.value = "Finalizing...";
+        // Auto-upgrade plaintext password to hashed
+        final updateData = <String, dynamic>{
+          'lastLogin': DateTime.now().toIso8601String(),
+        };
+        if (!AppwriteService.isHashed(storedPassword)) {
+          updateData['password'] = AppwriteService.hashPassword(password);
+        }
         await AppwriteService.databases.updateDocument(
-          databaseId: '6a2c10dc000d5e50f314',
+          databaseId: AppwriteService.databaseId,
           collectionId: 'users',
           documentId: doc.$id,
-          data: {'lastLogin': DateTime.now().toIso8601String()},
+          data: updateData,
         );
+        // Trigger lazy background cleanup of old accounts
+        AppwriteService.cleanupInactiveAccounts();
+        
         if (!mounted) return;
         Navigator.of(context).pop();
         final adminDepartment = data['department'] as String? ?? '';
@@ -225,12 +242,22 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
           return;
         }
         statusText.value = "Finalizing...";
+        // Auto-upgrade plaintext password to hashed
+        final updateData2 = <String, dynamic>{
+          'lastLogin': DateTime.now().toIso8601String(),
+        };
+        if (!AppwriteService.isHashed(storedPassword)) {
+          updateData2['password'] = AppwriteService.hashPassword(password);
+        }
         await AppwriteService.databases.updateDocument(
-          databaseId: '6a2c10dc000d5e50f314',
+          databaseId: AppwriteService.databaseId,
           collectionId: 'users',
           documentId: doc.$id,
-          data: {'lastLogin': DateTime.now().toIso8601String()},
+          data: updateData2,
         );
+        // Trigger lazy background cleanup of old accounts
+        AppwriteService.cleanupInactiveAccounts();
+        
         if (!mounted) return;
         Navigator.of(context).pop();
         final dept = data['department'] as String? ?? '';
@@ -277,11 +304,18 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
 
         statusText.value = "Finalizing...";
 
+        // Auto-upgrade plaintext password to hashed
+        final updateData3 = <String, dynamic>{
+          'lastLogin': DateTime.now().toIso8601String(),
+        };
+        if (!AppwriteService.isHashed(storedPassword)) {
+          updateData3['password'] = AppwriteService.hashPassword(password);
+        }
         await AppwriteService.databases.updateDocument(
-          databaseId: '6a2c10dc000d5e50f314',
+          databaseId: AppwriteService.databaseId,
           collectionId: 'users',
           documentId: doc.$id,
-          data: {'lastLogin': DateTime.now().toIso8601String()},
+          data: updateData3,
         );
 
         if (!mounted) return;

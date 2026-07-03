@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'app_theme.dart';
@@ -71,7 +71,7 @@ class _AdminOrgChartPageState extends State<AdminOrgChartPage> {
     try {
       // 1. Fetch all admins
       final result = await AppwriteService.databases.listDocuments(
-        databaseId: '6a2c10dc000d5e50f314',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'users',
         queries: [
           Query.equal('role', 'admin'),
@@ -104,7 +104,7 @@ class _AdminOrgChartPageState extends State<AdminOrgChartPage> {
 
       // 2. Fetch all classes to determine relationships
       final classesResult = await AppwriteService.databases.listDocuments(
-        databaseId: '6a2c10dc000d5e50f314',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'classes',
         queries: [
           Query.limit(500),

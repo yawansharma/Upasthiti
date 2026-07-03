@@ -366,7 +366,7 @@ class _DeanHomePageState extends State<DeanHomePage> {
 
       statusNotifier.value = "Migrating classes...";
       final classDocs = await AppwriteService.databases.listDocuments(
-        databaseId: '6a2c10dc000d5e50f314',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'classes',
         queries: [Query.limit(5000)],
       );
@@ -375,7 +375,7 @@ class _DeanHomePageState extends State<DeanHomePage> {
         if (data['createdBy'] == null ||
             data['createdBy'].toString().isEmpty) {
           await AppwriteService.databases.updateDocument(
-            databaseId: '6a2c10dc000d5e50f314',
+            databaseId: AppwriteService.databaseId,
             collectionId: 'classes',
             documentId: doc.$id,
             data: {'createdBy': 'dean_master', 'adminName': 'Master Dean'},
@@ -386,7 +386,7 @@ class _DeanHomePageState extends State<DeanHomePage> {
 
       statusNotifier.value = "Migrating attendance logs...";
       final logDocs = await AppwriteService.databases.listDocuments(
-        databaseId: '6a2c10dc000d5e50f314',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'attendance_logs',
         queries: [Query.limit(5000)],
       );
@@ -395,7 +395,7 @@ class _DeanHomePageState extends State<DeanHomePage> {
         if (data['adminId'] == null ||
             data['adminId'].toString().isEmpty) {
           await AppwriteService.databases.updateDocument(
-            databaseId: '6a2c10dc000d5e50f314',
+            databaseId: AppwriteService.databaseId,
             collectionId: 'attendance_logs',
             documentId: doc.$id,
             data: {'adminId': 'dean_master'},
@@ -1197,7 +1197,7 @@ class _AdminListTabState extends State<_AdminListTab> {
     super.initState();
     _fetchAdmins();
     _sub = AppwriteService.realtime
-        .subscribe(['databases.6a2c10dc000d5e50f314.collections.users.documents']);
+        .subscribe(['databases.${AppwriteService.databaseId}.collections.users.documents']);
     _sub!.stream.listen((_) {
       if (mounted) _fetchAdmins();
     });
@@ -1212,7 +1212,7 @@ class _AdminListTabState extends State<_AdminListTab> {
   Future<void> _fetchAdmins() async {
     try {
       final result = await AppwriteService.databases.listDocuments(
-        databaseId: '6a2c10dc000d5e50f314',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'users',
         queries: [
           Query.equal('role', [
@@ -1481,7 +1481,7 @@ class _AdminListTabState extends State<_AdminListTab> {
                               try {
                                 final exists = await AppwriteService.databases
                                     .listDocuments(
-                                  databaseId: '6a2c10dc000d5e50f314',
+                                  databaseId: AppwriteService.databaseId,
                                   collectionId: 'users',
                                   queries: [
                                     Query.equal('username',
@@ -1504,7 +1504,7 @@ class _AdminListTabState extends State<_AdminListTab> {
                                   'name': nameCtrl.text.trim().isNotEmpty
                                       ? nameCtrl.text.trim()
                                       : usernameCtrl.text.trim(),
-                                  'password': passCtrl.text.trim(),
+                                  'password': AppwriteService.hashPassword(passCtrl.text.trim()),
                                   'role': roleValues[selectedIdx],
                                   'status': 'active',
                                   'createdAt':
@@ -1521,7 +1521,7 @@ class _AdminListTabState extends State<_AdminListTab> {
 
                                 await AppwriteService.databases
                                     .createDocument(
-                                  databaseId: '6a2c10dc000d5e50f314',
+                                  databaseId: AppwriteService.databaseId,
                                   collectionId: 'users',
                                   documentId: ID.unique(),
                                   data: docData,
@@ -1768,10 +1768,10 @@ class _AdminListTabState extends State<_AdminListTab> {
                     onPressed: () async {
                       if (passCtrl.text.trim().isEmpty) return;
                       await AppwriteService.databases.updateDocument(
-                        databaseId: '6a2c10dc000d5e50f314',
+                        databaseId: AppwriteService.databaseId,
                         collectionId: 'users',
                         documentId: doc.$id,
-                        data: {'password': passCtrl.text.trim()},
+                        data: {'password': AppwriteService.hashPassword(passCtrl.text.trim())},
                       );
                       if (!mounted) return;
                       ScaffoldMessenger.of(ctx).showSnackBar(
@@ -1808,7 +1808,7 @@ class _AdminListTabState extends State<_AdminListTab> {
                     if (!canProceed) return;
                   }
                   await AppwriteService.databases.updateDocument(
-                    databaseId: '6a2c10dc000d5e50f314',
+                    databaseId: AppwriteService.databaseId,
                     collectionId: 'users',
                     documentId: doc.$id,
                     data: {
@@ -1859,7 +1859,7 @@ class _AdminListTabState extends State<_AdminListTab> {
                   );
                   if (confirm == true) {
                     await AppwriteService.databases.deleteDocument(
-                      databaseId: '6a2c10dc000d5e50f314',
+                      databaseId: AppwriteService.databaseId,
                       collectionId: 'users',
                       documentId: doc.$id,
                     );

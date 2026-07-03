@@ -99,7 +99,7 @@ class _OfficeAdminStudentAttendancePageState
   Future<void> _fetchLogs() async {
     try {
       final result = await AppwriteService.databases.listDocuments(
-        databaseId: '6a2c10dc000d5e50f314',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'attendance_logs',
         queries: [
           Query.equal('userId', widget.studentId),

@@ -10,7 +10,7 @@ import 'services/appwrite_service.dart';
 import 'components/user_avatar.dart';
 
 const Color _kSAAccent = Color(0xFF8A2A2A);
-const String _kDb = '6a2c10dc000d5e50f314';
+final String _kDb = AppwriteService.databaseId;
 
 class SecurityAdminHomePage extends StatefulWidget {
   final String adminName;

@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import 'package:appwrite/models.dart' as models;
 import 'package:file_picker/file_picker.dart';
@@ -165,7 +165,7 @@ class _ChatViewState extends State<_ChatView> {
   Future<void> _fetchMessages() async {
     try {
       final result = await AppwriteService.databases.listDocuments(
-        databaseId: '6a2c10dc000d5e50f314',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'community_messages',
         queries: [
           Query.equal('classId', widget.classId),
@@ -205,7 +205,7 @@ class _ChatViewState extends State<_ChatView> {
     setState(() => _sending = true);
     try {
       await AppwriteService.databases.createDocument(
-        databaseId: '6a2c10dc000d5e50f314',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'community_messages',
         documentId: ID.unique(),
         data: {
@@ -257,7 +257,7 @@ class _ChatViewState extends State<_ChatView> {
           '/files/${uploaded.$id}/view?project=${AppwriteService.projectId}';
 
       await AppwriteService.databases.createDocument(
-        databaseId: '6a2c10dc000d5e50f314',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'community_messages',
         documentId: ID.unique(),
         data: {
@@ -365,7 +365,7 @@ class _AdminDmListTab extends StatelessWidget {
           final studentId = studentIds[i];
           return FutureBuilder<models.Document>(
             future: AppwriteService.databases.getDocument(
-              databaseId: '6a2c10dc000d5e50f314',
+              databaseId: AppwriteService.databaseId,
               collectionId: 'users',
               documentId: studentId,
             ),
@@ -783,6 +783,8 @@ class _InputBar extends StatelessWidget {
             child: TextField(
               controller: ctrl,
               maxLines: null,
+              maxLength: 1000,
+              buildCounter: (context, {required currentLength, required isFocused, required maxLength}) => null,
               keyboardType: TextInputType.multiline,
               decoration: InputDecoration(
                 hintText: "Type a message...",

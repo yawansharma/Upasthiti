@@ -62,6 +62,11 @@ class _AdminHomePageState extends State<AdminHomePage> {
   bool _selectionMode = false;
   final Set<String> _selectedLogIds = {};
 
+
+  // Pagination for logs
+  final ScrollController _logsScrollController = ScrollController();
+  bool _isLoadingMoreLogs = false;
+
   // Realtime subscriptions
   RealtimeSubscription? _classesSub;
   RealtimeSubscription? _logsSub;
@@ -73,6 +78,13 @@ class _AdminHomePageState extends State<AdminHomePage> {
     _fetchClasses().then((_) {
       if (mounted) _fetchLogs();
     });
+
+    _logsScrollController.addListener(() {
+      if (_logsScrollController.position.pixels >= _logsScrollController.position.maxScrollExtent - 200) {
+        _loadMoreLogs();
+      }
+    });
+
     _classesSub = AppwriteService.realtime
         .subscribe(['databases.main_db.collections.classes.documents']);
     _classesSub!.stream.listen((_) {
@@ -88,7 +100,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
   Future<void> _fetchAdminProfile() async {
     try {
       final res = await AppwriteService.databases.listDocuments(
-        databaseId: '6a2c10dc000d5e50f314',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'users',
         queries: [
           Query.equal('username', widget.adminId),
@@ -110,7 +122,35 @@ class _AdminHomePageState extends State<AdminHomePage> {
   void dispose() {
     _classesSub?.close();
     _logsSub?.close();
+    _logsScrollController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadMoreLogs() async {
+    if (widget.adminLevel != 1) return;
+    if (_isLoadingMoreLogs || _logs.isEmpty) return;
+    setState(() => _isLoadingMoreLogs = true);
+    try {
+      final lastId = _logs.last.$id;
+      final result = await AppwriteService.databases.listDocuments(
+        databaseId: AppwriteService.databaseId,
+        collectionId: 'attendance_logs',
+        queries: [
+          Query.equal('adminId', widget.adminId),
+          Query.orderDesc('timestamp'),
+          Query.limit(50),
+          Query.cursorAfter(lastId),
+        ],
+      );
+      if (mounted) {
+        setState(() {
+          _logs.addAll(result.documents);
+          _isLoadingMoreLogs = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingMoreLogs = false);
+    }
   }
 
   Future<void> _fetchClasses() async {
@@ -147,12 +187,12 @@ class _AdminHomePageState extends State<AdminHomePage> {
       final List<models.Document> allLogs = [];
       if (widget.adminLevel == 1) {
         final result = await AppwriteService.databases.listDocuments(
-          databaseId: '6a2c10dc000d5e50f314',
+          databaseId: AppwriteService.databaseId,
           collectionId: 'attendance_logs',
           queries: [
             Query.equal('adminId', widget.adminId),
             Query.orderDesc('timestamp'),
-            Query.limit(5000),
+            Query.limit(50),
           ],
         );
         allLogs.addAll(result.documents);
@@ -160,7 +200,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
         for (final classId in classIds) {
           try {
             final result = await AppwriteService.databases.listDocuments(
-              databaseId: '6a2c10dc000d5e50f314',
+              databaseId: AppwriteService.databaseId,
               collectionId: 'attendance_logs',
               queries: [
                 Query.equal('classId', classId),
@@ -964,7 +1004,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                             'boundary': jsonEncode(pendingBoundary ?? {}),
                           };
                           await AppwriteService.databases.createDocument(
-                            databaseId: '6a2c10dc000d5e50f314',
+                            databaseId: AppwriteService.databaseId,
                             collectionId: 'classes',
                             documentId: classId,
                             data: widget.isDean ? {...docData, 'actingAs': 'dean'} : docData,
@@ -1386,9 +1426,16 @@ class _AdminHomePageState extends State<AdminHomePage> {
                   child: Text('No records found.',
                       style: TextStyle(color: Colors.grey)))
               : ListView.builder(
+                  controller: _logsScrollController,
                   padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                  itemCount: logs.length,
+                  itemCount: logs.length + (_isLoadingMoreLogs ? 1 : 0),
                   itemBuilder: (context, index) {
+                    if (index == logs.length) {
+                      return const Padding(
+                        padding: EdgeInsets.all(16.0),
+                        child: Center(child: CircularProgressIndicator(color: AppTheme.kGreen)),
+                      );
+                    }
                     final doc = logs[index];
                     final data = doc.data;
                     final isSelected =
@@ -1463,7 +1510,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
     if (!confirm) return;
     for (final doc in toDelete) {
       await AppwriteService.databases.updateDocument(
-        databaseId: '6a2c10dc000d5e50f314',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'attendance_logs',
         documentId: doc.$id,
         data: {'isHiddenFromAdmin': true},
@@ -1491,7 +1538,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
       if (!confirm) return;
       for (final doc in logs) {
         await AppwriteService.databases.updateDocument(
-          databaseId: '6a2c10dc000d5e50f314',
+          databaseId: AppwriteService.databaseId,
           collectionId: 'attendance_logs',
           documentId: doc.$id,
           data: {'isHiddenFromAdmin': true},
@@ -1556,7 +1603,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                     if (!confirm) return;
                     for (final doc in byDay[day]!) {
                       await AppwriteService.databases.updateDocument(
-                        databaseId: '6a2c10dc000d5e50f314',
+                        databaseId: AppwriteService.databaseId,
                         collectionId: 'attendance_logs',
                         documentId: doc.$id,
                         data: {'isHiddenFromAdmin': true},
@@ -1653,7 +1700,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
 
     return FutureBuilder<models.Document>(
       future: AppwriteService.databases.getDocument(
-        databaseId: '6a2c10dc000d5e50f314',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'users',
         documentId: userId,
       ),
@@ -1771,7 +1818,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
 
     // Fetch all non-hidden logs for this admin
     final logsSnapshot = await AppwriteService.databases.listDocuments(
-      databaseId: '6a2c10dc000d5e50f314',
+      databaseId: AppwriteService.databaseId,
       collectionId: 'attendance_logs',
       queries: [
         Query.equal('createdBy', widget.adminId),
@@ -1997,7 +2044,7 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
     ids.remove(username);
 
     await AppwriteService.databases.updateDocument(
-      databaseId: '6a2c10dc000d5e50f314',
+      databaseId: AppwriteService.databaseId,
       collectionId: 'classes',
       documentId: widget.classId,
       data: _stampActor({'studentIds': ids}),
@@ -2039,7 +2086,7 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
     if (confirmed != true || !mounted) return;
 
     await AppwriteService.databases.updateDocument(
-      databaseId: '6a2c10dc000d5e50f314',
+      databaseId: AppwriteService.databaseId,
       collectionId: 'users',
       documentId: userDoc.$id,
       data: {'status': isDisabled ? 'active' : 'disabled'},
@@ -2079,7 +2126,7 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
 
       // 4. Update the Appwrite document
       await AppwriteService.databases.updateDocument(
-        databaseId: '6a2c10dc000d5e50f314',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'classes',
         documentId: widget.classId,
         data: _stampActor({
@@ -2132,7 +2179,7 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
 
       // 3. Update the Appwrite document
       await AppwriteService.databases.updateDocument(
-        databaseId: '6a2c10dc000d5e50f314',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'classes',
         documentId: widget.classId,
         data: _stampActor({
@@ -2446,7 +2493,7 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
                                         await AppwriteService.databases
                                             .updateDocument(
                                           databaseId:
-                                              '6a2c10dc000d5e50f314',
+                                              AppwriteService.databaseId,
                                           collectionId: 'classes',
                                           documentId: widget.classId,
                                           data: _stampActor({'boundary': boundaryJson}),
@@ -2493,7 +2540,7 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
                                         await AppwriteService.databases
                                             .updateDocument(
                                           databaseId:
-                                              '6a2c10dc000d5e50f314',
+                                              AppwriteService.databaseId,
                                           collectionId: 'classes',
                                           documentId: widget.classId,
                                           data: _stampActor({'boundary': boundaryJson}),
@@ -2559,7 +2606,7 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
 
     // Delete all periods for this class
     final periodsSnap = await AppwriteService.databases.listDocuments(
-      databaseId: '6a2c10dc000d5e50f314',
+      databaseId: AppwriteService.databaseId,
       collectionId: 'periods',
       queries: [
         Query.equal('classId', widget.classId),
@@ -2568,7 +2615,7 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
     );
     for (final doc in periodsSnap.documents) {
       await AppwriteService.databases.deleteDocument(
-        databaseId: '6a2c10dc000d5e50f314',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'periods',
         documentId: doc.$id,
       );
@@ -2576,7 +2623,7 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
 
     // Delete all attendance logs for this class
     final logsSnap = await AppwriteService.databases.listDocuments(
-      databaseId: '6a2c10dc000d5e50f314',
+      databaseId: AppwriteService.databaseId,
       collectionId: 'attendance_logs',
       queries: [
         Query.equal('classId', widget.classId),
@@ -2585,7 +2632,7 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
     );
     for (final doc in logsSnap.documents) {
       await AppwriteService.databases.deleteDocument(
-        databaseId: '6a2c10dc000d5e50f314',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'attendance_logs',
         documentId: doc.$id,
       );
@@ -2593,7 +2640,7 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
 
     // Delete the class document
     await AppwriteService.databases.deleteDocument(
-      databaseId: '6a2c10dc000d5e50f314',
+      databaseId: AppwriteService.databaseId,
       collectionId: 'classes',
       documentId: widget.classId,
     );
@@ -2611,7 +2658,7 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
       await Permission.manageExternalStorage.request();
     }
     final logsSnapshot = await AppwriteService.databases.listDocuments(
-      databaseId: '6a2c10dc000d5e50f314',
+      databaseId: AppwriteService.databaseId,
       collectionId: 'attendance_logs',
       queries: [
         Query.equal('classId', widget.classId),
@@ -3197,19 +3244,19 @@ class _PeriodsManagementSectionState
 
     if (confirm == true) {
       final logsSnap = await AppwriteService.databases.listDocuments(
-        databaseId: '6a2c10dc000d5e50f314',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'attendance_logs',
         queries: [Query.equal('periodId', pId)],
       );
       for (final doc in logsSnap.documents) {
         await AppwriteService.databases.deleteDocument(
-          databaseId: '6a2c10dc000d5e50f314',
+          databaseId: AppwriteService.databaseId,
           collectionId: 'attendance_logs',
           documentId: doc.$id,
         );
       }
       await AppwriteService.databases.deleteDocument(
-        databaseId: '6a2c10dc000d5e50f314',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'periods',
         documentId: pId,
       );
@@ -3287,7 +3334,7 @@ class _PeriodsManagementSectionState
     }
 
     final periodsSnap = await AppwriteService.databases.listDocuments(
-      databaseId: '6a2c10dc000d5e50f314',
+      databaseId: AppwriteService.databaseId,
       collectionId: 'periods',
       queries: [Query.equal('classId', widget.classId)],
     );
@@ -3317,7 +3364,7 @@ class _PeriodsManagementSectionState
 
     final dateStr = DateFormat('yyyy-MM-dd').format(selectedDate);
     await AppwriteService.databases.createDocument(
-      databaseId: '6a2c10dc000d5e50f314',
+      databaseId: AppwriteService.databaseId,
       collectionId: 'periods',
       documentId: ID.unique(),
       data: {
@@ -3381,7 +3428,7 @@ class _PeriodsManagementSectionState
           const SizedBox(height: 14),
           FutureBuilder<models.DocumentList>(
             future: AppwriteService.databases.listDocuments(
-              databaseId: '6a2c10dc000d5e50f314',
+              databaseId: AppwriteService.databaseId,
               collectionId: 'periods',
               queries: [
                 Query.equal('classId', widget.classId),
@@ -3546,7 +3593,7 @@ class _PeriodAttendancePageState extends State<PeriodAttendancePage> {
       String studentId, String? logDocId, String status) async {
     if (logDocId != null) {
       await AppwriteService.databases.updateDocument(
-        databaseId: '6a2c10dc000d5e50f314',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'attendance_logs',
         documentId: logDocId,
         data: {
@@ -3556,7 +3603,7 @@ class _PeriodAttendancePageState extends State<PeriodAttendancePage> {
       );
     } else {
       await AppwriteService.databases.createDocument(
-        databaseId: '6a2c10dc000d5e50f314',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'attendance_logs',
         documentId: ID.unique(),
         data: {
@@ -3682,7 +3729,7 @@ class _PeriodAttendancePageState extends State<PeriodAttendancePage> {
         ),
         body: FutureBuilder<models.DocumentList>(
           future: AppwriteService.databases.listDocuments(
-            databaseId: '6a2c10dc000d5e50f314',
+            databaseId: AppwriteService.databaseId,
             collectionId: 'attendance_logs',
             queries: [Query.equal('periodId', widget.periodId)],
           ),
@@ -3752,7 +3799,7 @@ class _PeriodAttendancePageState extends State<PeriodAttendancePage> {
                           return FutureBuilder<models.Document>(
                             future: AppwriteService.databases
                                 .getDocument(
-                              databaseId: '6a2c10dc000d5e50f314',
+                              databaseId: AppwriteService.databaseId,
                               collectionId: 'users',
                               documentId: studentId,
                             ),
@@ -3869,7 +3916,7 @@ class _PeriodAttendancePageState extends State<PeriodAttendancePage> {
                           return FutureBuilder<models.Document>(
                             future: AppwriteService.databases
                                 .getDocument(
-                              databaseId: '6a2c10dc000d5e50f314',
+                              databaseId: AppwriteService.databaseId,
                               collectionId: 'users',
                               documentId: studentId,
                             ),

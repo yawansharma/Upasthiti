@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -74,7 +74,7 @@ class _AdminScanPageState extends State<AdminScanPage> {
     Map<String, dynamic>? userData;
     try {
       final res = await AppwriteService.databases.listDocuments(
-        databaseId: '6a2c10dc000d5e50f314',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'users',
         queries: [Query.equal('username', userId), Query.limit(1)],
       );
