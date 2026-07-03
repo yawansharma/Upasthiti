@@ -1,11 +1,11 @@
-﻿import 'dart:io';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:appwrite/appwrite.dart';
 import 'package:appwrite/models.dart' as models;
 import 'package:file_picker/file_picker.dart';
-import 'package:excel/excel.dart' hide Border;
+import 'package:excel/excel.dart' hide Border, Center;
 import '../services/distribution_service.dart';
 import '../services/appwrite_service.dart';
 import 'admin_scan_page.dart';
@@ -1019,6 +1019,7 @@ class _AdminEventDetailSheetState extends State<_AdminEventDetailSheet> {
           eventId: _event.$id,
           userId: uid,
           userName: displayName,
+          callerId: widget.adminId,
         );
         added++;
       } catch (_) {
@@ -1172,6 +1173,7 @@ class _AdminEventDetailSheetState extends State<_AdminEventDetailSheet> {
                                       userName:
                                           u['name'] as String? ??
                                           u['username'] as String,
+                                      callerId: widget.adminId,
                                     );
                                     _refreshAll();
                                     widget.onChanged();
@@ -1562,6 +1564,7 @@ class _AdminEventDetailSheetState extends State<_AdminEventDetailSheet> {
                                   onPressed: () async {
                                     await DistributionService.revokeAdmin(
                                       a.$id,
+                                      callerId: widget.adminId,
                                     );
                                     _fetchAssignments();
                                   },
@@ -1612,6 +1615,7 @@ class _AdminEventDetailSheetState extends State<_AdminEventDetailSheet> {
                                     await DistributionService.removeRecipient(
                                       r.$id,
                                       _event.$id,
+                                      callerId: widget.adminId,
                                     );
                                     _refreshAll();
                                     widget.onChanged();
@@ -1649,7 +1653,10 @@ class _AdminEventDetailSheetState extends State<_AdminEventDetailSheet> {
                 onPressed: _actioning
                     ? null
                     : () => _doAction(() async {
-                        await DistributionService.activateEvent(_event.$id);
+                        await DistributionService.activateEvent(
+                          _event.$id,
+                          callerId: widget.adminId,
+                        );
                         widget.onChanged();
                         _refreshAll();
                       }),
@@ -1710,7 +1717,10 @@ class _AdminEventDetailSheetState extends State<_AdminEventDetailSheet> {
             onPressed: () {
               Navigator.pop(context);
               _doAction(() async {
-                await DistributionService.closeEvent(_event.$id);
+                await DistributionService.closeEvent(
+                  _event.$id,
+                  callerId: widget.adminId,
+                );
                 widget.onChanged();
                 _refreshAll();
               });

@@ -1,11 +1,11 @@
-﻿import 'dart:io';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:appwrite/appwrite.dart';
 import 'package:appwrite/models.dart' as models;
 import 'package:file_picker/file_picker.dart';
-import 'package:excel/excel.dart' hide Border;
+import 'package:excel/excel.dart' hide Border, Center;
 import '../services/distribution_service.dart';
 import '../services/appwrite_service.dart';
 
@@ -601,6 +601,8 @@ class _EventDetailSheetState extends State<_EventDetailSheet> {
           eventId: _event.$id,
           userId: uid,
           userName: displayName,
+          callerId: 'dean',
+          isDean: true,
         );
         added++;
       } catch (_) {
@@ -735,6 +737,8 @@ class _EventDetailSheetState extends State<_EventDetailSheet> {
                                       userId: u['username'] as String,
                                       userName: u['name'] as String? ??
                                           u['username'] as String,
+                                      callerId: 'dean',
+                                      isDean: true,
                                     );
                                     _refreshAll();
                                     widget.onChanged();
@@ -868,6 +872,7 @@ class _EventDetailSheetState extends State<_EventDetailSheet> {
                                                     as String? ??
                                                 adminId,
                                             assignedBy: 'dean',
+                                            isDean: true,
                                           );
                                           _fetchAssignments();
                                           setDlg(() {});
@@ -1111,7 +1116,9 @@ class _EventDetailSheetState extends State<_EventDetailSheet> {
                                           color: Colors.redAccent, size: 18),
                                       onPressed: () async {
                                         await DistributionService.revokeAdmin(
-                                            a.$id);
+                                            a.$id,
+                                            callerId: 'dean',
+                                            isDean: true);
                                         _fetchAssignments();
                                       },
                                     )
@@ -1161,7 +1168,9 @@ class _EventDetailSheetState extends State<_EventDetailSheet> {
                                       onPressed: () async {
                                         await DistributionService
                                             .removeRecipient(
-                                                r.$id, _event.$id);
+                                                r.$id, _event.$id,
+                                                callerId: 'dean',
+                                                isDean: true);
                                         _refreshAll();
                                         widget.onChanged();
                                       },
@@ -1198,7 +1207,9 @@ class _EventDetailSheetState extends State<_EventDetailSheet> {
                     ? null
                     : () => _doAction(() async {
                           await DistributionService.activateEvent(
-                              _event.$id);
+                              _event.$id,
+                              callerId: 'dean',
+                              isDean: true);
                           widget.onChanged();
                           _refreshAll();
                         }),
@@ -1255,7 +1266,8 @@ class _EventDetailSheetState extends State<_EventDetailSheet> {
             onPressed: () {
               Navigator.pop(context);
               _doAction(() async {
-                await DistributionService.closeEvent(_event.$id);
+                await DistributionService.closeEvent(_event.$id,
+                    callerId: 'dean', isDean: true);
                 widget.onChanged();
                 _refreshAll();
               });

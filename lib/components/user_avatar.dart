@@ -60,11 +60,9 @@ class _UserAvatarState extends State<UserAvatar> {
     }
 
     try {
-      final bytes = await AppwriteService.storage.getFilePreview(
+      final bytes = await AppwriteService.storage.getFileView(
         bucketId: '6a2c12a500260c940843',
         fileId: widget.profilePictureId!,
-        width: (widget.radius * 3).toInt(),
-        height: (widget.radius * 3).toInt(),
       );
       if (mounted) {
         setState(() {

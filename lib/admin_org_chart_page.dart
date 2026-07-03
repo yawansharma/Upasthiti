@@ -6,6 +6,29 @@ import 'services/appwrite_service.dart';
 import 'components/user_avatar.dart';
 import 'services/admin_hierarchy_service.dart';
 
+const _kSpecialRoles = ['officeAdmin', 'eventAdmin', 'hrAdmin', 'securityAdmin'];
+
+const _kSpecialRoleLabels = {
+  'officeAdmin': 'Office Admin',
+  'eventAdmin': 'Event Admin',
+  'hrAdmin': 'HR Admin',
+  'securityAdmin': 'Security Admin',
+};
+
+class _SpecialRoleAdmin {
+  final String id;
+  final String name;
+  final String role;
+  final String? profilePictureId;
+
+  _SpecialRoleAdmin({
+    required this.id,
+    required this.name,
+    required this.role,
+    this.profilePictureId,
+  });
+}
+
 class OrgNode {
   final String id;
   final String name;
@@ -36,6 +59,7 @@ class AdminOrgChartPage extends StatefulWidget {
 class _AdminOrgChartPageState extends State<AdminOrgChartPage> {
   bool _isLoading = true;
   List<OrgNode> _roots = [];
+  List<_SpecialRoleAdmin> _specialRoleAdmins = [];
 
   @override
   void initState() {
@@ -55,6 +79,28 @@ class _AdminOrgChartPageState extends State<AdminOrgChartPage> {
         ],
       );
       final admins = result.documents;
+
+      // 1b. Fetch cross-cutting roles separately — they have no
+      // head/supervisor relationship to nest in the tree above.
+      final specialResult = await AppwriteService.databases.listDocuments(
+        databaseId: '6a2c10dc000d5e50f314',
+        collectionId: 'users',
+        queries: [
+          Query.equal('role', _kSpecialRoles),
+          Query.limit(200),
+        ],
+      );
+      final specialRoleAdmins = specialResult.documents
+          .map((doc) => _SpecialRoleAdmin(
+                id: doc.data['username'] as String? ?? '',
+                name: doc.data['name'] as String? ??
+                    doc.data['username'] as String? ??
+                    'Admin',
+                role: doc.data['role'] as String? ?? '',
+                profilePictureId: doc.data['profilePictureId'] as String?,
+              ))
+          .where((a) => a.id.isNotEmpty)
+          .toList();
 
       // 2. Fetch all classes to determine relationships
       final classesResult = await AppwriteService.databases.listDocuments(
@@ -131,6 +177,7 @@ class _AdminOrgChartPageState extends State<AdminOrgChartPage> {
       if (mounted) {
         setState(() {
           _roots = roots;
+          _specialRoleAdmins = specialRoleAdmins;
           _isLoading = false;
         });
       }
@@ -169,23 +216,111 @@ class _AdminOrgChartPageState extends State<AdminOrgChartPage> {
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(35)),
                 child: _isLoading
                     ? const Center(child: CircularProgressIndicator(color: AppTheme.kGreen))
-                    : _roots.isEmpty
+                    : (_roots.isEmpty && _specialRoleAdmins.isEmpty)
                         ? _buildEmptyState()
-                        : ListView.builder(
+                        : ListView(
                             padding: const EdgeInsets.all(24),
-                            itemCount: _roots.length,
-                            itemBuilder: (context, index) => _buildNode(
-                              _roots[index], 
-                              0, 
-                              index == _roots.length - 1, 
-                              [],
-                            ),
+                            children: [
+                              if (_specialRoleAdmins.isNotEmpty) ...[
+                                _buildSpecialRolesSection(),
+                                const SizedBox(height: 28),
+                                if (_roots.isNotEmpty)
+                                  Text(
+                                    "Institution Hierarchy",
+                                    style: GoogleFonts.poppins(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                      color: Colors.black87,
+                                    ),
+                                  ),
+                                if (_roots.isNotEmpty)
+                                  const SizedBox(height: 16),
+                              ],
+                              for (int i = 0; i < _roots.length; i++)
+                                _buildNode(
+                                  _roots[i],
+                                  0,
+                                  i == _roots.length - 1,
+                                  [],
+                                ),
+                            ],
                           ),
               ),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildSpecialRolesSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          "Cross-Cutting Roles",
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+            color: Colors.black87,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          "Operate institution-wide, outside the L1/L2/L3 chain",
+          style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade600),
+        ),
+        const SizedBox(height: 14),
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: _specialRoleAdmins.map((a) {
+            final isMe = a.id == widget.currentAdminId;
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: isMe ? AppTheme.kGreen : Colors.grey.shade200,
+                  width: isMe ? 1.5 : 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 6,
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  UserAvatar(
+                    profilePictureId: a.profilePictureId,
+                    fallbackName: a.name,
+                    radius: 16,
+                  ),
+                  const SizedBox(width: 10),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(a.name,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w600, fontSize: 13)),
+                      Text(
+                        _kSpecialRoleLabels[a.role] ?? a.role,
+                        style: TextStyle(
+                            fontSize: 11, color: Colors.grey.shade600),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+        ),
+      ],
     );
   }
 

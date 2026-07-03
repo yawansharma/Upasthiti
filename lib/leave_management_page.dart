@@ -58,10 +58,13 @@ class _LeaveManagementPageState extends State<LeaveManagementPage>
       // A Level 3 admin submits to Level 2; Level 2 submits to Level 1.
       // So if I am Level 2, I approve requests from Level 3 (approverLevel == 2).
       // approverLevel in document is the level of the person WHO SHOULD APPROVE.
-      final res = await LeaveService.getPendingRequests(widget.userLevel);
+      final res = await LeaveService.getPendingRequests(
+        widget.userLevel,
+        approverId: widget.userId,
+      );
       if (mounted) {
         setState(() {
-          _pendingApprovals = res.documents;
+          _pendingApprovals = res;
           _loadingApprovals = false;
         });
       }
@@ -72,7 +75,12 @@ class _LeaveManagementPageState extends State<LeaveManagementPage>
 
   Future<void> _handleAction(String docId, String status) async {
     try {
-      await LeaveService.updateStatus(docId, status, widget.userName);
+      await LeaveService.updateStatus(
+        docId,
+        status,
+        widget.userName,
+        actionById: widget.userId,
+      );
       _fetchApprovals();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

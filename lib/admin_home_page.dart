@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -235,7 +235,9 @@ class _AdminHomePageState extends State<AdminHomePage> {
                     color: AppTheme.kGreen.withValues(alpha: 0.3)),
               ),
               child: Text(
-                "ADMIN: ${widget.adminName.toUpperCase()}",
+                widget.adminLevel == 1
+                    ? "INSTITUTION ADMIN: ${widget.adminName.toUpperCase()}"
+                    : "ADMIN: ${widget.adminName.toUpperCase()}",
                 style: GoogleFonts.poppins(
                     color: AppTheme.kGreen,
                     fontWeight: FontWeight.bold,
@@ -516,7 +518,9 @@ class _AdminHomePageState extends State<AdminHomePage> {
                   final data = classDoc.data;
                   final List<dynamic> studentIds =
                       data['studentIds'] as List<dynamic>? ?? [];
-                  final bool hasBoundary = data['boundary'] != null && data['boundary'].toString().isNotEmpty;
+                  final bool hasBoundary =
+                      AdminHierarchyService.geoFromBoundary(data['boundary'])['lat'] !=
+                          null;
 
                   return Card(
                     margin: const EdgeInsets.only(bottom: 14),
@@ -535,6 +539,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                             classData: data,
                             adminName: widget.adminName,
                             adminLevel: widget.adminLevel,
+                            isDean: widget.isDean,
                           ),
                           transitionsBuilder: (context, animation,
                               secondaryAnimation, child) {
@@ -662,6 +667,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                     classDoc: classDoc,
                                     l1AdminId: widget.adminId,
                                     onSaved: _fetchClasses,
+                                    isDean: widget.isDean,
                                   );
                                 },
                               ),
@@ -848,12 +854,12 @@ class _AdminHomePageState extends State<AdminHomePage> {
                   decoration: BoxDecoration(
                     color: pendingBoundary != null
                         ? const Color(0xFF6A8A73).withValues(alpha: 0.08)
-                        : Colors.red.withValues(alpha: 0.05),
+                        : Colors.grey.withValues(alpha: 0.06),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
                       color: pendingBoundary != null
                           ? const Color(0xFF6A8A73)
-                          : Colors.red.shade300,
+                          : Colors.grey.shade300,
                     ),
                   ),
                   child: Row(
@@ -864,34 +870,49 @@ class _AdminHomePageState extends State<AdminHomePage> {
                             : Icons.location_off_outlined,
                         color: pendingBoundary != null
                             ? const Color(0xFF6A8A73)
-                            : Colors.red,
+                            : Colors.grey.shade600,
                         size: 20,
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
                           pendingBoundary != null
-                              ? "Boundary set Ã¢â‚¬â€ ${(pendingBoundary!['radiusMeters'] as num).toStringAsFixed(0)} m radius"
-                              : "Set Boundary (required)",
+                              ? "Boundary set — ${(pendingBoundary!['radiusMeters'] as num).toStringAsFixed(0)} m radius"
+                              : "Set Boundary (optional)",
                           style: TextStyle(
                             fontSize: 13,
                             color: pendingBoundary != null
                                 ? const Color(0xFF6A8A73)
-                                : Colors.red,
+                                : Colors.grey.shade700,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
                       ),
-                      Icon(
-                        Icons.arrow_forward_ios,
-                        size: 12,
-                        color: pendingBoundary != null
-                            ? const Color(0xFF6A8A73)
-                            : Colors.red,
-                      ),
+                      if (pendingBoundary != null)
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 16),
+                          color: Colors.grey.shade600,
+                          tooltip: "Remove boundary",
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          onPressed: () => setSt(() => pendingBoundary = null),
+                        )
+                      else
+                        Icon(
+                          Icons.arrow_forward_ios,
+                          size: 12,
+                          color: Colors.grey.shade600,
+                        ),
                     ],
                   ),
                 ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                pendingBoundary != null
+                    ? "Students must pass both GPS and face verification to mark attendance."
+                    : "No boundary set — students will only need face verification.",
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
               ),
             ],
           ),
@@ -907,9 +928,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                   foregroundColor: Colors.white,
                   disabledBackgroundColor: Colors.grey.shade300,
                 ),
-                onPressed: saving ||
-                        codeCtrl.text.trim().isEmpty ||
-                        pendingBoundary == null
+                onPressed: saving || codeCtrl.text.trim().isEmpty
                     ? null
                     : () async {
                         final code = codeCtrl.text.trim();
@@ -936,24 +955,25 @@ class _AdminHomePageState extends State<AdminHomePage> {
                         setSt(() => saving = true);
                         try {
                           final classId = ID.unique();
+                          final docData = {
+                            'className': name,
+                            'classCode': code,
+                            'adminName': widget.adminName,
+                            'createdBy': widget.adminId,
+                            'studentIds': <String>[],
+                            'boundary': jsonEncode(pendingBoundary ?? {}),
+                          };
                           await AppwriteService.databases.createDocument(
                             databaseId: '6a2c10dc000d5e50f314',
                             collectionId: 'classes',
                             documentId: classId,
-                            data: {
-                              'className': name,
-                              'classCode': code,
-                              'adminName': widget.adminName,
-                              'createdBy': widget.adminId,
-                              'studentIds': <String>[],
-                              'boundary': jsonEncode(pendingBoundary),
-                            },
+                            data: widget.isDean ? {...docData, 'actingAs': 'dean'} : docData,
                           );
 
                           await AdminHierarchyService.persistClassAssignments(
                             classDocId: classId,
                             classData: {
-                              'boundary': jsonEncode(pendingBoundary),
+                              'boundary': jsonEncode(pendingBoundary ?? {}),
                             },
                             l1AdminId: widget.adminId,
                             headAdminId: headId,
@@ -1911,6 +1931,7 @@ class ClassManagementPage extends StatefulWidget {
   final Map<String, dynamic> classData;
   final String adminName;
   final int adminLevel;
+  final bool isDean;
 
   const ClassManagementPage({
     super.key,
@@ -1918,6 +1939,7 @@ class ClassManagementPage extends StatefulWidget {
     required this.classData,
     required this.adminName,
     required this.adminLevel,
+    this.isDean = false,
   });
 
   @override
@@ -1926,6 +1948,9 @@ class ClassManagementPage extends StatefulWidget {
 
 class _ClassManagementPageState extends State<ClassManagementPage> {
   late Map<String, dynamic> _classData;
+
+  Map<String, dynamic> _stampActor(Map<String, dynamic> data) =>
+      widget.isDean ? {...data, 'actingAs': 'dean'} : data;
 
   @override
   void initState() {
@@ -1975,7 +2000,7 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
       databaseId: '6a2c10dc000d5e50f314',
       collectionId: 'classes',
       documentId: widget.classId,
-      data: {'studentIds': ids},
+      data: _stampActor({'studentIds': ids}),
     );
     if (mounted) {
       setState(() => _classData['studentIds'] = ids);
@@ -2057,10 +2082,10 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
         databaseId: '6a2c10dc000d5e50f314',
         collectionId: 'classes',
         documentId: widget.classId,
-        data: {
+        data: _stampActor({
           'boundary': jsonEncode(boundaryData),
           'studentIds': studentIds,
-        },
+        }),
       );
 
       // 5. Update local state
@@ -2110,9 +2135,9 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
         databaseId: '6a2c10dc000d5e50f314',
         collectionId: 'classes',
         documentId: widget.classId,
-        data: {
+        data: _stampActor({
           'boundary': jsonEncode(boundaryData),
-        },
+        }),
       );
 
       // 4. Update local state
@@ -2396,57 +2421,99 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
                                 ),
                               ]),
                               const SizedBox(height: 6),
-                              SizedBox(
-                                width: double.infinity,
-                                child: ElevatedButton(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor:
-                                        const Color(0xFF6A8A73),
-                                    foregroundColor: Colors.white,
-                                    shape: RoundedRectangleBorder(
-                                        borderRadius:
-                                            BorderRadius.circular(
-                                                10)),
-                                  ),
-                                  onPressed: () async {
-                                    final geo = {
-                                      'lat': current.latitude,
-                                      'lng': current.longitude,
-                                      'radiusMeters': radius,
-                                    };
-                                    final assignments =
-                                        AdminHierarchyService.readAssignments(
-                                            _classData);
-                                    final boundaryJson =
-                                        AdminHierarchyService
-                                            .encodeBoundaryWithAssignments(
-                                      geo,
-                                      assignments,
-                                    );
-                                    await AppwriteService.databases
-                                        .updateDocument(
-                                      databaseId: '6a2c10dc000d5e50f314',
-                                      collectionId: 'classes',
-                                      documentId: widget.classId,
-                                      data: {'boundary': boundaryJson},
-                                    );
-                                    setState(() =>
-                                        _classData['boundary'] =
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: OutlinedButton(
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: Colors.grey.shade700,
+                                        side: BorderSide(
+                                            color: Colors.grey.shade400),
+                                        shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(10)),
+                                      ),
+                                      onPressed: () async {
+                                        final assignments =
+                                            AdminHierarchyService
+                                                .readAssignments(_classData);
+                                        final boundaryJson =
+                                            AdminHierarchyService
+                                                .encodeBoundaryWithAssignments(
+                                          {},
+                                          assignments,
+                                        );
+                                        await AppwriteService.databases
+                                            .updateDocument(
+                                          databaseId:
+                                              '6a2c10dc000d5e50f314',
+                                          collectionId: 'classes',
+                                          documentId: widget.classId,
+                                          data: _stampActor({'boundary': boundaryJson}),
+                                        );
+                                        setState(() => _classData['boundary'] =
                                             boundaryJson);
-                                    if (mounted) {
-                                      Navigator.pop(context);
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
-                                              const SnackBar(
+                                        if (mounted) {
+                                          Navigator.pop(context);
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(const SnackBar(
                                                   content: Text(
-                                                      "Boundary saved.")));
-                                    }
-                                  },
-                                  child: const Text("Save Boundary",
-                                      style: TextStyle(
-                                          fontWeight:
-                                              FontWeight.bold)),
-                                ),
+                                                      "Boundary removed — students will only need face verification.")));
+                                        }
+                                      },
+                                      child: const Text("Remove Boundary"),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: ElevatedButton(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor:
+                                            const Color(0xFF6A8A73),
+                                        foregroundColor: Colors.white,
+                                        shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(10)),
+                                      ),
+                                      onPressed: () async {
+                                        final geo = {
+                                          'lat': current.latitude,
+                                          'lng': current.longitude,
+                                          'radiusMeters': radius,
+                                        };
+                                        final assignments =
+                                            AdminHierarchyService
+                                                .readAssignments(_classData);
+                                        final boundaryJson =
+                                            AdminHierarchyService
+                                                .encodeBoundaryWithAssignments(
+                                          geo,
+                                          assignments,
+                                        );
+                                        await AppwriteService.databases
+                                            .updateDocument(
+                                          databaseId:
+                                              '6a2c10dc000d5e50f314',
+                                          collectionId: 'classes',
+                                          documentId: widget.classId,
+                                          data: _stampActor({'boundary': boundaryJson}),
+                                        );
+                                        setState(() => _classData['boundary'] =
+                                            boundaryJson);
+                                        if (mounted) {
+                                          Navigator.pop(context);
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(const SnackBar(
+                                                  content:
+                                                      Text("Boundary saved.")));
+                                        }
+                                      },
+                                      child: const Text("Save Boundary",
+                                          style: TextStyle(
+                                              fontWeight: FontWeight.bold)),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
@@ -2588,7 +2655,10 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
   Widget build(BuildContext context) {
     final List<dynamic> studentIds =
         _classData['studentIds'] as List<dynamic>? ?? [];
-    final bool hasBoundary = _classData['boundary'] != null;
+    final bool hasBoundary = _classData['boundary'] != null &&
+        _classData['boundary'].toString().isNotEmpty &&
+        AdminHierarchyService.geoFromBoundary(_classData['boundary'])['lat'] !=
+            null;
 
     return Scaffold(
       backgroundColor: const Color(0xFF101010),

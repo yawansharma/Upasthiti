@@ -6,7 +6,7 @@ import 'package:appwrite/models.dart' as models;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:csv/csv.dart';
-import 'package:excel/excel.dart' hide Border;
+import 'package:excel/excel.dart' hide Border, Center;
 import 'package:path_provider/path_provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
@@ -54,7 +54,9 @@ class _OfficeAdminHomePageState extends State<OfficeAdminHomePage> {
           adminId: widget.adminId, department: widget.adminDepartment),
       _StudentsTab(department: widget.adminDepartment),
       _ReportsTab(department: widget.adminDepartment),
-      _BiometricsTab(department: widget.adminDepartment),
+      _BiometricsTab(department: widget.adminDepartment, adminId: widget.adminId),
+      _VerificationTab(),
+      _AuditTrailTab(adminId: widget.adminId),
     ];
   }
 
@@ -157,6 +159,14 @@ class _OfficeAdminHomePageState extends State<OfficeAdminHomePage> {
               icon: Icon(Icons.fingerprint),
               activeIcon: Icon(Icons.fingerprint),
               label: "Biometrics"),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.verified_outlined),
+              activeIcon: Icon(Icons.verified),
+              label: "Verify"),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.history),
+              activeIcon: Icon(Icons.history),
+              label: "Audit"),
         ],
       ),
     );
@@ -840,6 +850,74 @@ class _ReportsTabState extends State<_ReportsTab> {
     }
   }
 
+  Future<void> _showAbsentees() async {
+    if (_selectedClass == null) {
+      _snack("Please select a class first.");
+      return;
+    }
+    if (_startDate == null || _endDate == null) {
+      _snack("Please select a date range.");
+      return;
+    }
+    
+    final classId = _selectedClass!.$id;
+    final start = DateTime(_startDate!.year, _startDate!.month, _startDate!.day).toIso8601String();
+    final end = DateTime(_endDate!.year, _endDate!.month, _endDate!.day + 1).toIso8601String();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator(color: _kOAAccent)),
+    );
+
+    try {
+      final logsResult = await AppwriteService.databases.listDocuments(
+        databaseId: _kDb,
+        collectionId: 'attendance_logs',
+        queries: [
+          Query.equal('classId', classId),
+          Query.greaterThanEqual('timestamp', start),
+          Query.lessThan('timestamp', end),
+          Query.limit(5000),
+        ],
+      );
+
+      final presentIds = logsResult.documents.map((d) => d.data['userId'] as String? ?? '').toSet();
+      final allStudentIds = List<String>.from(_selectedClass!.data['studentIds'] ?? []);
+      final absentees = allStudentIds.where((id) => !presentIds.contains(id)).toList();
+
+      if (mounted) Navigator.pop(context); // close loader
+
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: Text("Absentees (${absentees.length})", style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: absentees.length,
+                itemBuilder: (ctx, i) => ListTile(
+                  leading: const Icon(Icons.person_off, color: Colors.orange),
+                  title: Text(absentees[i], style: GoogleFonts.poppins()),
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text("Close", style: TextStyle(color: _kOAAccent)))
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // close loader
+        _snack("Failed to fetch absentees: $e");
+      }
+    }
+  }
+
   void _snack(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
@@ -1022,6 +1100,25 @@ class _ReportsTabState extends State<_ReportsTab> {
                 ),
               ),
             ],
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _showAbsentees,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange.shade700,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  elevation: 0,
+                ),
+                icon: const Icon(Icons.person_off_outlined, size: 20),
+                label: Text("View Absentees",
+                    style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.bold, fontSize: 15)),
+              ),
+            ),
 
             // Saved file path
             if (_lastSavedPath != null) ...[
@@ -1087,7 +1184,8 @@ class _ReportsTabState extends State<_ReportsTab> {
 
 class _BiometricsTab extends StatefulWidget {
   final String department;
-  const _BiometricsTab({required this.department});
+  final String adminId;
+  const _BiometricsTab({required this.department, required this.adminId});
   @override
   State<_BiometricsTab> createState() => _BiometricsTabState();
 }
@@ -1154,11 +1252,9 @@ class _BiometricsTabState extends State<_BiometricsTab> {
     }
     Uint8List? bytes;
     try {
-      bytes = await AppwriteService.storage.getFilePreview(
+      bytes = await AppwriteService.storage.getFileView(
         bucketId: _kProfileBucket,
         fileId: fileId,
-        width: 400,
-        height: 400,
       );
     } catch (_) {}
     if (!mounted) return;
@@ -1261,13 +1357,26 @@ class _BiometricsTabState extends State<_BiometricsTab> {
             bytes: bytes, filename: 'bio_${username}_update.jpg'),
       );
 
-      // 4. Update user doc
       await AppwriteService.databases.updateDocument(
         databaseId: _kDb,
         collectionId: 'users',
         documentId: doc.$id,
         data: {'profilePictureId': newFile.$id},
       );
+
+      try {
+        await AppwriteService.databases.createDocument(
+          databaseId: _kDb,
+          collectionId: 'office_admin_audit_log',
+          documentId: ID.unique(),
+          data: {
+            'adminId': widget.adminId,
+            'action': oldFileId != null && oldFileId.isNotEmpty ? 'update' : 'enroll',
+            'studentUsername': username,
+            'timestamp': DateTime.now().toIso8601String(),
+          },
+        );
+      } catch (_) {}
 
       if (mounted) {
         Navigator.of(context).pop(); // dismiss dialog
@@ -1319,13 +1428,26 @@ class _BiometricsTabState extends State<_BiometricsTab> {
     } catch (_) {}
 
     try {
-      // Clear field in user doc
       await AppwriteService.databases.updateDocument(
         databaseId: _kDb,
         collectionId: 'users',
         documentId: doc.$id,
         data: {'profilePictureId': null},
       );
+
+      try {
+        await AppwriteService.databases.createDocument(
+          databaseId: _kDb,
+          collectionId: 'office_admin_audit_log',
+          documentId: ID.unique(),
+          data: {
+            'adminId': widget.adminId,
+            'action': 'delete',
+            'studentUsername': username,
+            'timestamp': DateTime.now().toIso8601String(),
+          },
+        );
+      } catch (_) {}
       _snack("Biometric deleted.");
       _fetchStudents();
     } catch (e) {
@@ -1579,6 +1701,182 @@ class _BiometricsTabState extends State<_BiometricsTab> {
                   fontSize: 15, color: Colors.black45)),
         ],
       ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tab 4 — Verification (Attendance Approval)
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _VerificationTab extends StatefulWidget {
+  @override
+  State<_VerificationTab> createState() => _VerificationTabState();
+}
+
+class _VerificationTabState extends State<_VerificationTab> {
+  List<models.Document> _pendingLogs = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetch();
+  }
+
+  Future<void> _fetch() async {
+    try {
+      final res = await AppwriteService.databases.listDocuments(
+        databaseId: _kDb,
+        collectionId: 'attendance_logs',
+        queries: [
+          Query.equal('adminVerifiedStatus', 'Pending'),
+          Query.orderDesc('timestamp'),
+          Query.limit(100),
+        ],
+      );
+      if (mounted) setState(() { _pendingLogs = res.documents; _loading = false; });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _updateStatus(String docId, String status) async {
+    try {
+      await AppwriteService.databases.updateDocument(
+        databaseId: _kDb,
+        collectionId: 'attendance_logs',
+        documentId: docId,
+        data: {'adminVerifiedStatus': status},
+      );
+      _fetch();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      decoration: AppTheme.bottomSheet,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                AppTheme.sheetHandle,
+                Text("Verify Attendance", style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87)),
+              ],
+            ),
+          ),
+          Expanded(
+            child: _loading ? const Center(child: CircularProgressIndicator(color: _kOAAccent))
+              : _pendingLogs.isEmpty ? const Center(child: Text("No pending logs."))
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  itemCount: _pendingLogs.length,
+                  itemBuilder: (ctx, i) {
+                    final d = _pendingLogs[i].data;
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      child: ListTile(
+                        title: Text("${d['className']} - ${d['userId']}"),
+                        subtitle: Text(d['timestamp'].toString()),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(icon: const Icon(Icons.check, color: Colors.green), onPressed: () => _updateStatus(_pendingLogs[i].$id, 'Verified')),
+                            IconButton(icon: const Icon(Icons.close, color: Colors.red), onPressed: () => _updateStatus(_pendingLogs[i].$id, 'Rejected')),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+                )
+          )
+        ]
+      )
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tab 5 — Audit Trail
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _AuditTrailTab extends StatefulWidget {
+  final String adminId;
+  const _AuditTrailTab({required this.adminId});
+  @override
+  State<_AuditTrailTab> createState() => _AuditTrailTabState();
+}
+
+class _AuditTrailTabState extends State<_AuditTrailTab> {
+  List<models.Document> _logs = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetch();
+  }
+
+  Future<void> _fetch() async {
+    try {
+      final res = await AppwriteService.databases.listDocuments(
+        databaseId: _kDb,
+        collectionId: 'office_admin_audit_log',
+        queries: [
+          Query.equal('adminId', widget.adminId),
+          Query.orderDesc('timestamp'),
+          Query.limit(100),
+        ],
+      );
+      if (mounted) setState(() { _logs = res.documents; _loading = false; });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      decoration: AppTheme.bottomSheet,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                AppTheme.sheetHandle,
+                Text("Audit Trail", style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87)),
+              ],
+            ),
+          ),
+          Expanded(
+            child: _loading ? const Center(child: CircularProgressIndicator(color: _kOAAccent))
+              : _logs.isEmpty ? const Center(child: Text("No audit logs found."))
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  itemCount: _logs.length,
+                  itemBuilder: (ctx, i) {
+                    final d = _logs[i].data;
+                    return Card(
+                      child: ListTile(
+                        title: Text("${d['action'].toString().toUpperCase()} - ${d['studentUsername']}"),
+                        subtitle: Text(d['timestamp'].toString()),
+                      ),
+                    );
+                  }
+                )
+          )
+        ]
+      )
     );
   }
 }

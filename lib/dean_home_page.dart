@@ -1,12 +1,19 @@
-﻿import 'package:flutter/material.dart';
-import 'package:appwrite/appwrite.dart';
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:appwrite/appwrite.dart' hide Permission;
 import 'package:appwrite/models.dart' as models;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:excel/excel.dart' hide Border, Center;
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'dean_login.dart';
 import 'admin_home_page.dart';
+import 'admin_hierarchy_views.dart';
 import 'app_theme.dart';
 import 'services/appwrite_service.dart';
+import 'services/admin_hierarchy_service.dart';
+import 'services/leave_service.dart';
 import 'distribution/dean_distribution_tab.dart';
 import 'components/user_avatar.dart';
 
@@ -131,7 +138,8 @@ class _DeanHomePageState extends State<DeanHomePage> {
                             children: [
                               _navItem(0, Icons.people_alt, "Personnel"),
                               _navItem(1, Icons.inventory_2_outlined, "Distribution"),
-                              _navItem(2, Icons.settings, "More"),
+                              _navItem(2, Icons.bar_chart_rounded, "Reports"),
+                              _navItem(3, Icons.settings, "More"),
                             ],
                           ),
                         ),
@@ -154,6 +162,8 @@ class _DeanHomePageState extends State<DeanHomePage> {
       case 1:
         return "Distribution";
       case 2:
+        return "Admin Reports";
+      case 3:
         return "System Settings";
       default:
         return "Dashboard";
@@ -167,7 +177,9 @@ class _DeanHomePageState extends State<DeanHomePage> {
       case 1:
         return const DeanDistributionTab(key: ValueKey(1));
       case 2:
-        return _buildMoreTab(key: const ValueKey(2));
+        return const _DeanReportsTab(key: ValueKey(2));
+      case 3:
+        return _buildMoreTab(key: const ValueKey(3));
       default:
         return const SizedBox(key: ValueKey(0));
     }
@@ -271,6 +283,37 @@ class _DeanHomePageState extends State<DeanHomePage> {
             leading: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
+                  color: kDeanGold.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10)),
+              child: const Icon(Icons.event_note_rounded,
+                  color: kDeanGold, size: 20),
+            ),
+            title: const Text("Leave Approvals",
+                style: TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: const Text("Institution Admins' leave requests",
+                style: TextStyle(fontSize: 12)),
+            trailing:
+                const Icon(Icons.chevron_right, color: Colors.grey),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const _DeanLeaveApprovalsPage(),
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 12),
+        Card(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          elevation: 0,
+          color: Colors.white,
+          child: ListTile(
+            leading: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
                   color: Colors.red.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10)),
               child: const Icon(Icons.logout_rounded,
@@ -361,11 +404,83 @@ class _DeanHomePageState extends State<DeanHomePage> {
         }
       }
 
+      statusNotifier.value = "Checking for orphaned class assignments...";
+      final orphaned = <Map<String, String>>[];
+      for (final doc in classDocs.documents) {
+        final assignments = AdminHierarchyService.readAssignments(doc.data);
+        final className = doc.data['className'] as String? ?? 'Class';
+        for (final entry in [
+          (id: assignments.headAdminId, role: 'Head admin'),
+          (id: assignments.supervisorId, role: 'Supervisor'),
+        ]) {
+          final danglingId = entry.id;
+          if (danglingId == null || danglingId.isEmpty) continue;
+          final user = await AdminHierarchyService.findUserByUsername(
+            danglingId,
+          );
+          if (user == null || user.data['status'] == 'disabled') {
+            orphaned.add({
+              'className': className,
+              'role': entry.role,
+              'danglingId': danglingId,
+            });
+          }
+        }
+      }
+
       if (mounted) Navigator.pop(ctx);
       if (mounted) {
         ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
             content: Text(
                 'Migration Complete: $updatedClasses classes, $updatedLogs logs assigned to Master.')));
+      }
+      if (orphaned.isNotEmpty && mounted) {
+        await showDialog<void>(
+          context: ctx,
+          builder: (c) => AlertDialog(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Text("Orphaned Class Assignments Found"),
+            content: SizedBox(
+              width: 420,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "${orphaned.length} class assignment${orphaned.length == 1 ? '' : 's'} "
+                    "point at a disabled or deleted admin. These weren't "
+                    "auto-migrated — reassign them via each admin's normal "
+                    "assignment flow:",
+                  ),
+                  const SizedBox(height: 12),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 260),
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: orphaned.length,
+                      itemBuilder: (_, i) {
+                        final o = orphaned[i];
+                        return ListTile(
+                          dense: true,
+                          title: Text(o['className']!),
+                          subtitle: Text(
+                              "${o['role']} — dangling id: ${o['danglingId']}"),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(c),
+                child: const Text("Close"),
+              ),
+            ],
+          ),
+        );
       }
     } catch (e) {
       if (mounted) Navigator.pop(ctx);
@@ -374,6 +489,680 @@ class _DeanHomePageState extends State<DeanHomePage> {
             .showSnackBar(SnackBar(content: Text('Migration Error: $e')));
       }
     }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// DEAN LEAVE APPROVALS PAGE
+// ---------------------------------------------------------------------------
+class _DeanLeaveApprovalsPage extends StatefulWidget {
+  const _DeanLeaveApprovalsPage();
+
+  @override
+  State<_DeanLeaveApprovalsPage> createState() =>
+      _DeanLeaveApprovalsPageState();
+}
+
+class _DeanLeaveApprovalsPageState extends State<_DeanLeaveApprovalsPage> {
+  List<models.Document> _requests = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetch();
+  }
+
+  Future<void> _fetch() async {
+    try {
+      final res = await LeaveService.getPendingRequests(0, approverId: 'dean');
+      if (mounted) {
+        setState(() {
+          _requests = res;
+          _loading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _act(String docId, String status) async {
+    try {
+      await LeaveService.updateStatus(docId, status, 'Dean', actionById: 'dean');
+      _fetch();
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text("Request $status")));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text("Failed: $e")));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: kDeanDark,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        foregroundColor: Colors.white,
+        title: const Text("Leave Approvals",
+            style: TextStyle(fontWeight: FontWeight.bold)),
+      ),
+      body: Container(
+        margin: const EdgeInsets.only(top: 12),
+        decoration: const BoxDecoration(
+          color: Color(0xFFF8F9FB),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(35)),
+        ),
+        child: _loading
+            ? const Center(
+                child: CircularProgressIndicator(color: kDeanGold))
+            : _requests.isEmpty
+                ? Center(
+                    child: Text("No pending Institution Admin leave requests.",
+                        style: TextStyle(color: Colors.grey.shade500)))
+                : ListView.builder(
+                    padding: const EdgeInsets.all(20),
+                    itemCount: _requests.length,
+                    itemBuilder: (context, i) {
+                      final data = _requests[i].data;
+                      final start = DateTime.parse(data['startDate']);
+                      final end = DateTime.parse(data['endDate']);
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20)),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text("From: ${data['userName']}",
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16)),
+                              Text("Type: ${data['leaveType']}",
+                                  style: const TextStyle(
+                                      fontSize: 12, color: Colors.grey)),
+                              const SizedBox(height: 8),
+                              Text(
+                                "${DateFormat('dd MMM').format(start)} - ${DateFormat('dd MMM').format(end)}",
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                              const SizedBox(height: 8),
+                              Text("Reason: ${data['reason']}",
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 13)),
+                              const SizedBox(height: 16),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: OutlinedButton(
+                                      onPressed: () =>
+                                          _act(_requests[i].$id, 'denied'),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: Colors.red,
+                                        side:
+                                            const BorderSide(color: Colors.red),
+                                      ),
+                                      child: const Text("Deny"),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: ElevatedButton(
+                                      onPressed: () =>
+                                          _act(_requests[i].$id, 'approved'),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: kDeanGold,
+                                        foregroundColor: kDeanDark,
+                                      ),
+                                      child: const Text("Approve"),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// DEAN REPORTS TAB
+// ---------------------------------------------------------------------------
+class _DeanReportsTab extends StatefulWidget {
+  const _DeanReportsTab({super.key});
+
+  @override
+  State<_DeanReportsTab> createState() => _DeanReportsTabState();
+}
+
+class _DeanReportsTabState extends State<_DeanReportsTab> {
+  bool _loading = true;
+  bool _exporting = false;
+  String? _error;
+
+  // Raw data
+  List<models.Document> _admins = [];
+  List<models.Document> _classes = [];
+  List<models.Document> _logs = [];
+
+  // Aggregated
+  late Map<String, int> _classesPerAdmin;    // adminId → class count
+  late Map<String, int> _logsPerAdmin;       // adminId → log count
+  late Map<String, int> _logsPerClass;       // classId → log count
+  late Map<String, int> _adminsPerDept;      // dept → admin count
+  late Map<String, int> _classesPerDept;     // dept → class count
+  late Map<String, int> _studentsPerDept;    // dept → enrolled student count
+  late Map<String, int> _logsPerDept;        // dept → log count
+
+  static const _kDb = '6a2c10dc000d5e50f314';
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      final adminsRes = await AppwriteService.databases.listDocuments(
+        databaseId: _kDb,
+        collectionId: 'users',
+        queries: [
+          Query.equal('role', ['admin', 'officeAdmin', 'eventAdmin', 'hrAdmin', 'securityAdmin']),
+          Query.limit(500),
+        ],
+      );
+      final classesRes = await AppwriteService.databases.listDocuments(
+        databaseId: _kDb,
+        collectionId: 'classes',
+        queries: [Query.limit(500)],
+      );
+      final logsRes = await AppwriteService.databases.listDocuments(
+        databaseId: _kDb,
+        collectionId: 'attendance_logs',
+        queries: [Query.limit(5000)],
+      );
+
+      _admins = adminsRes.documents;
+      _classes = classesRes.documents;
+      _logs = logsRes.documents;
+      _aggregate();
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _aggregate() {
+    _classesPerAdmin = {};
+    _logsPerAdmin = {};
+    _logsPerClass = {};
+    _adminsPerDept = {};
+    _classesPerDept = {};
+    _studentsPerDept = {};
+    _logsPerDept = {};
+
+    // Admin → dept mapping
+    final Map<String, String> adminDept = {
+      for (final a in _admins)
+        (a.data['username'] as String? ?? a.$id): (a.data['department'] as String? ?? 'Unassigned'),
+    };
+
+    for (final c in _classes) {
+      final adminId = c.data['createdBy'] as String? ?? '';
+      final dept = adminDept[adminId] ?? c.data['department'] as String? ?? 'Unassigned';
+      final students = (c.data['studentIds'] as List<dynamic>? ?? []).length;
+
+      _classesPerAdmin[adminId] = (_classesPerAdmin[adminId] ?? 0) + 1;
+      _classesPerDept[dept] = (_classesPerDept[dept] ?? 0) + 1;
+      _studentsPerDept[dept] = (_studentsPerDept[dept] ?? 0) + students;
+    }
+
+    for (final l in _logs) {
+      final adminId = l.data['adminId'] as String? ?? '';
+      final classId = l.data['classId'] as String? ?? '';
+      final dept = adminDept[adminId] ?? 'Unassigned';
+
+      _logsPerAdmin[adminId] = (_logsPerAdmin[adminId] ?? 0) + 1;
+      _logsPerClass[classId] = (_logsPerClass[classId] ?? 0) + 1;
+      _logsPerDept[dept] = (_logsPerDept[dept] ?? 0) + 1;
+    }
+
+    for (final a in _admins) {
+      final dept = a.data['department'] as String? ?? 'Unassigned';
+      _adminsPerDept[dept] = (_adminsPerDept[dept] ?? 0) + 1;
+    }
+  }
+
+  String _levelLabel(dynamic level) {
+    switch (level) {
+      case 1: return 'Institution Admin';
+      case 2: return 'Head of Department';
+      case 3: return 'Team Leader';
+      default: return 'Special Role';
+    }
+  }
+
+  String _roleLabel(String? role) {
+    switch (role) {
+      case 'officeAdmin': return 'Office Admin';
+      case 'eventAdmin': return 'Event Admin';
+      case 'hrAdmin': return 'HR Admin';
+      case 'securityAdmin': return 'Security Admin';
+      default: return 'Admin';
+    }
+  }
+
+  Future<void> _exportExcel() async {
+    setState(() => _exporting = true);
+    try {
+      if (!Platform.isWindows && !(await Permission.storage.request().isGranted)) {
+        await Permission.manageExternalStorage.request();
+      }
+
+      final excel = Excel.createExcel();
+
+      // ── Sheet 1: Admin Overview ────────────────────────────────────
+      final s1 = excel['Admin Overview'];
+      excel.setDefaultSheet('Admin Overview');
+
+      final h1 = [
+        'Admin Name', 'Admin ID', 'Role / Level', 'Department',
+        'Status', 'Last Login', 'Classes Managed', 'Total Attendance Logs',
+      ];
+      s1.appendRow(h1.map((v) => TextCellValue(v)).toList());
+
+      for (final a in _admins) {
+        final d = a.data;
+        final id = d['username'] as String? ?? a.$id;
+        final role = d['role'] as String?;
+        final level = d['level'];
+        final roleLabel = (role == 'admin' && level != null)
+            ? _levelLabel(level)
+            : _roleLabel(role);
+        final raw = d['lastLogin'] as String?;
+        final lastLogin = raw != null
+            ? DateFormat('dd/MM/yyyy HH:mm').format(DateTime.parse(raw))
+            : 'Never';
+
+        s1.appendRow([
+          TextCellValue(d['name'] as String? ?? id),
+          TextCellValue(id),
+          TextCellValue(roleLabel),
+          TextCellValue(d['department'] as String? ?? 'Unassigned'),
+          TextCellValue(d['status'] as String? ?? 'active'),
+          TextCellValue(lastLogin),
+          IntCellValue(_classesPerAdmin[id] ?? 0),
+          IntCellValue(_logsPerAdmin[id] ?? 0),
+        ]);
+      }
+
+      // ── Sheet 2: Department Summary ────────────────────────────────
+      final s2 = excel['Department Summary'];
+      final h2 = [
+        'Department', 'Total Admins', 'Total Classes',
+        'Students Enrolled', 'Total Attendance Logs',
+      ];
+      s2.appendRow(h2.map((v) => TextCellValue(v)).toList());
+
+      final allDepts = {
+        ..._adminsPerDept.keys,
+        ..._classesPerDept.keys,
+      }.toList()..sort();
+
+      for (final dept in allDepts) {
+        s2.appendRow([
+          TextCellValue(dept),
+          IntCellValue(_adminsPerDept[dept] ?? 0),
+          IntCellValue(_classesPerDept[dept] ?? 0),
+          IntCellValue(_studentsPerDept[dept] ?? 0),
+          IntCellValue(_logsPerDept[dept] ?? 0),
+        ]);
+      }
+
+      // ── Sheet 3: Class Breakdown ───────────────────────────────────
+      final s3 = excel['Class Breakdown'];
+      final h3 = [
+        'Class Name', 'Class Code', 'Managed By (Admin ID)',
+        'Admin Level', 'Department', 'Students Enrolled', 'Total Logs',
+      ];
+      s3.appendRow(h3.map((v) => TextCellValue(v)).toList());
+
+      final Map<String, String> adminDept = {
+        for (final a in _admins)
+          (a.data['username'] as String? ?? a.$id): (a.data['department'] as String? ?? 'Unassigned'),
+      };
+      final Map<String, dynamic> adminLevel = {
+        for (final a in _admins)
+          (a.data['username'] as String? ?? a.$id): a.data['level'],
+      };
+
+      for (final c in _classes) {
+        final d = c.data;
+        final adminId = d['createdBy'] as String? ?? '';
+        final dept = adminDept[adminId] ?? 'Unassigned';
+        final level = adminLevel[adminId];
+        final students = (d['studentIds'] as List<dynamic>? ?? []).length;
+
+        s3.appendRow([
+          TextCellValue(d['className'] as String? ?? ''),
+          TextCellValue(d['classCode'] as String? ?? ''),
+          TextCellValue(adminId),
+          TextCellValue(level != null ? _levelLabel(level) : 'Unknown'),
+          TextCellValue(dept),
+          IntCellValue(students),
+          IntCellValue(_logsPerClass[c.$id] ?? 0),
+        ]);
+      }
+
+      // Remove the default blank sheet Excel creates
+      excel.delete('Sheet1');
+
+      // Save file
+      final bytes = excel.encode();
+      if (bytes == null) throw Exception('Failed to encode Excel file');
+
+      final dir = Platform.isWindows
+          ? Directory('${Platform.environment['USERPROFILE']}\\Downloads')
+          : await getExternalStorageDirectory();
+      if (dir == null) throw Exception('Could not find downloads directory');
+
+      final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+      final path = '${dir.path}/dean_admin_report_$timestamp.xlsx';
+      await File(path).writeAsBytes(bytes);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Saved: dean_admin_report_$timestamp.xlsx'),
+            backgroundColor: kDeanDark,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Export failed: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator(color: kDeanGold));
+    }
+    if (_error != null) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline, color: Colors.red, size: 48),
+            const SizedBox(height: 12),
+            Text(_error!, textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: _load,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final allDepts = {
+      ..._adminsPerDept.keys,
+      ..._classesPerDept.keys,
+    }.toList()..sort();
+
+    return RefreshIndicator(
+      onRefresh: _load,
+      color: kDeanGold,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
+        children: [
+          // ── Summary cards ──────────────────────────────────────────
+          Row(
+            children: [
+              _SummaryCard(label: 'Total Admins', value: '${_admins.length}', icon: Icons.manage_accounts),
+              const SizedBox(width: 12),
+              _SummaryCard(label: 'Total Classes', value: '${_classes.length}', icon: Icons.class_outlined),
+              const SizedBox(width: 12),
+              _SummaryCard(label: 'Attendance Logs', value: '${_logs.length}', icon: Icons.fact_check_outlined),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          // ── Export button ──────────────────────────────────────────
+          SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: ElevatedButton.icon(
+              onPressed: _exporting ? null : _exportExcel,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kDeanGold,
+                foregroundColor: kDeanDark,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                elevation: 0,
+              ),
+              icon: _exporting
+                  ? const SizedBox(width: 18, height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: kDeanDark))
+                  : const Icon(Icons.download_rounded),
+              label: Text(
+                _exporting ? 'Generating Excel...' : 'Download Excel Report',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '3 sheets: Admin Overview · Department Summary · Class Breakdown',
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 28),
+
+          // ── Department breakdown ───────────────────────────────────
+          Text('By Department',
+              style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 16)),
+          const SizedBox(height: 12),
+          ...allDepts.map((dept) {
+            final admCount = _adminsPerDept[dept] ?? 0;
+            final clsCount = _classesPerDept[dept] ?? 0;
+            final logCount = _logsPerDept[dept] ?? 0;
+            final stuCount = _studentsPerDept[dept] ?? 0;
+            return Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: kDeanGold.withValues(alpha: 0.15)),
+                boxShadow: [BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 8, offset: const Offset(0, 2),
+                )],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(dept,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      _StatPill(label: 'Admins', value: admCount, color: const Color(0xFF7A6A8A)),
+                      const SizedBox(width: 8),
+                      _StatPill(label: 'Classes', value: clsCount, color: const Color(0xFF4E7A8A)),
+                      const SizedBox(width: 8),
+                      _StatPill(label: 'Students', value: stuCount, color: kDeanGold),
+                      const SizedBox(width: 8),
+                      _StatPill(label: 'Logs', value: logCount, color: Colors.green.shade700),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          }),
+          const SizedBox(height: 28),
+
+          // ── Admin list ─────────────────────────────────────────────
+          Text('Admin Activity',
+              style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 16)),
+          const SizedBox(height: 12),
+          ..._admins.map((a) {
+            final d = a.data;
+            final id = d['username'] as String? ?? a.$id;
+            final role = d['role'] as String?;
+            final level = d['level'];
+            final roleLabel = (role == 'admin' && level != null)
+                ? _levelLabel(level)
+                : _roleLabel(role);
+            final classes = _classesPerAdmin[id] ?? 0;
+            final logs = _logsPerAdmin[id] ?? 0;
+            final status = d['status'] as String? ?? 'active';
+            final isDisabled = status == 'disabled';
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: isDisabled ? Colors.grey.shade50 : Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 20,
+                    backgroundColor: kDeanGold.withValues(alpha: 0.12),
+                    child: Text(
+                      (d['name'] as String? ?? id).isNotEmpty
+                          ? (d['name'] as String? ?? id)[0].toUpperCase()
+                          : '?',
+                      style: const TextStyle(
+                          color: kDeanDark, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(d['name'] as String? ?? id,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w600, fontSize: 13)),
+                        Text(roleLabel,
+                            style: TextStyle(
+                                fontSize: 11, color: Colors.grey.shade500)),
+                      ],
+                    ),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text('$classes classes',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                      Text('$logs logs',
+                          style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+                    ],
+                  ),
+                  if (isDisabled) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text('Disabled',
+                          style: TextStyle(fontSize: 10, color: Colors.red.shade700,
+                              fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
+
+class _SummaryCard extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  const _SummaryCard({required this.label, required this.value, required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+        decoration: BoxDecoration(
+          color: kDeanDark,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: kDeanGold, size: 22),
+            const SizedBox(height: 8),
+            Text(value,
+                style: const TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20)),
+            const SizedBox(height: 4),
+            Text(label,
+                style: const TextStyle(color: Colors.white54, fontSize: 10),
+                textAlign: TextAlign.center),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatPill extends StatelessWidget {
+  final String label;
+  final int value;
+  final Color color;
+  const _StatPill({required this.label, required this.value, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text('$value $label',
+          style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600)),
+    );
   }
 }
 
@@ -783,6 +1572,87 @@ class _AdminListTabState extends State<_AdminListTab> {
     );
   }
 
+  /// Returns true once [adminDoc] owns no classes (as head admin or
+  /// supervisor), prompting the Dean to reassign any it still owns first.
+  /// Returns false if the Dean cancels while classes are still owned.
+  Future<bool> _ensureNoOwnedClasses(models.Document adminDoc) async {
+    final username = adminDoc.data['username'] as String? ?? '';
+    while (true) {
+      final owned = await AdminHierarchyService.findOwnedClasses(username);
+      if (owned.isEmpty) return true;
+      if (!mounted) return false;
+
+      final chosenId = await showDialog<String>(
+        context: context,
+        builder: (dialogCtx) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text("Reassign Classes First"),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "${adminDoc.data['name'] ?? username} still owns "
+                  "${owned.length} class${owned.length == 1 ? '' : 'es'}. "
+                  "Reassign each one before suspending or deleting this "
+                  "account.",
+                ),
+                const SizedBox(height: 12),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 260),
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: owned.length,
+                    itemBuilder: (_, i) {
+                      final classDoc = owned[i];
+                      final data = classDoc.data;
+                      final assignments =
+                          AdminHierarchyService.readAssignments(data);
+                      final role = assignments.headAdminId == username
+                          ? "Head admin"
+                          : "Supervisor";
+                      return ListTile(
+                        dense: true,
+                        title: Text(data['className'] as String? ?? 'Class'),
+                        subtitle: Text(role),
+                        trailing: TextButton(
+                          onPressed: () =>
+                              Navigator.pop(dialogCtx, classDoc.$id),
+                          child: const Text("Reassign"),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx, null),
+              child: const Text("Cancel"),
+            ),
+          ],
+        ),
+      );
+
+      if (chosenId == null) return false;
+      if (!mounted) return false;
+
+      final classDoc = owned.firstWhere((d) => d.$id == chosenId);
+      await showClassStaffAssignmentSheet(
+        context: context,
+        classDoc: classDoc,
+        l1AdminId: classDoc.data['createdBy'] as String? ?? '',
+        isDean: true,
+      );
+      // Loop back and re-check ownership after the reassignment.
+    }
+  }
+
   void _showAdminDetails(models.Document doc) {
     final data = doc.data;
     final bool isActive = data['status'] != 'disabled';
@@ -933,6 +1803,10 @@ class _AdminListTabState extends State<_AdminListTab> {
                         fontSize: 12,
                         color: Colors.grey.shade500)),
                 onTap: () async {
+                  if (isActive) {
+                    final canProceed = await _ensureNoOwnedClasses(doc);
+                    if (!canProceed) return;
+                  }
                   await AppwriteService.databases.updateDocument(
                     databaseId: '6a2c10dc000d5e50f314',
                     collectionId: 'users',
@@ -961,6 +1835,8 @@ class _AdminListTabState extends State<_AdminListTab> {
                         fontSize: 12,
                         color: Colors.red.shade300)),
                 onTap: () async {
+                  final canProceed = await _ensureNoOwnedClasses(doc);
+                  if (!canProceed || !mounted) return;
                   final confirm = await showDialog<bool>(
                     context: ctx,
                     builder: (c) => AlertDialog(

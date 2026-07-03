@@ -53,7 +53,9 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
       case 'eventAdmin': return "EVENT ADMIN";
       case 'hrAdmin': return "HR ADMIN";
       case 'securityAdmin': return "SECURITY ADMIN";
-      default: return "LEVEL ${widget.requiredLevel}";
+      default:
+        if (widget.requiredLevel == 1) return "INSTITUTION ADMIN";
+        return "LEVEL ${widget.requiredLevel}";
     }
   }
 
@@ -63,7 +65,9 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
       case 'eventAdmin': return "Event Admin Portal";
       case 'hrAdmin': return "HR Admin Portal";
       case 'securityAdmin': return "Security Admin Portal";
-      default: return "Level ${widget.requiredLevel} Portal";
+      default:
+        if (widget.requiredLevel == 1) return "Institution Admin Portal";
+        return "Level ${widget.requiredLevel} Portal";
     }
   }
 
@@ -71,6 +75,7 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
     if (_isSpecialRole) {
       return "${_portalTitle.replaceAll(' Portal', '')} credentials only.";
     }
+    if (widget.requiredLevel == 1) return "Institution Admin credentials only.";
     return "Only Level ${widget.requiredLevel} credentials are accepted here.";
   }
 

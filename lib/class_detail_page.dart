@@ -36,8 +36,14 @@ class ClassDetailPage extends StatefulWidget {
 class _ClassDetailPageState extends State<ClassDetailPage> {
   bool _isReporting = false;
 
+  bool get _hasBoundary =>
+      widget.boundary != null &&
+      widget.boundary!['lat'] != null &&
+      widget.boundary!['lng'] != null &&
+      widget.boundary!['radiusMeters'] != null;
+
   Future<bool> _checkGeofence() async {
-    if (widget.boundary == null) return true;
+    if (!_hasBoundary) return true;
 
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) return false;
@@ -132,7 +138,7 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
   Future<void> _reportAttendance(Map<String, dynamic> activePeriod) async {
     if (_isReporting) return;
 
-    if (widget.boundary != null) {
+    if (_hasBoundary) {
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled && mounted) {
         await showDialog<void>(
@@ -185,7 +191,7 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
         isWithinGeofence = false;
       }
 
-      if (widget.boundary != null && !isWithinGeofence) {
+      if (_hasBoundary && !isWithinGeofence) {
         if (mounted) Navigator.of(context).pop();
         _showSnackBar(
           "You are outside the class boundary. Move closer and try again.",

@@ -5,7 +5,7 @@ import 'package:appwrite/models.dart' as models;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:csv/csv.dart';
-import 'package:excel/excel.dart' hide Border;
+import 'package:excel/excel.dart' hide Border, Center;
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 
@@ -66,7 +66,9 @@ class _HrAdminHomePageState extends State<HrAdminHomePage> {
                             _HRApprovalsTab(
                                 adminId: widget.adminId,
                                 adminDepartment: widget.adminDepartment),
-                            _HRLeaveTab(adminId: widget.adminId),
+                            _HRLeaveTab(
+                                adminId: widget.adminId,
+                                adminName: widget.adminName),
                             _HRReportsTab(
                                 adminId: widget.adminId,
                                 adminDepartment: widget.adminDepartment),
@@ -775,7 +777,8 @@ class _HRApprovalsTabState extends State<_HRApprovalsTab> {
 
 class _HRLeaveTab extends StatefulWidget {
   final String adminId;
-  const _HRLeaveTab({required this.adminId});
+  final String adminName;
+  const _HRLeaveTab({required this.adminId, required this.adminName});
 
   @override
   State<_HRLeaveTab> createState() => _HRLeaveTabState();
@@ -820,7 +823,12 @@ class _HRLeaveTabState extends State<_HRLeaveTab> {
 
   Future<void> _updateStatus(models.Document doc, String status) async {
     try {
-      await LeaveService.updateStatus(doc.$id, status, widget.adminId);
+      await LeaveService.updateStatus(
+        doc.$id,
+        status,
+        widget.adminName,
+        actionById: widget.adminId,
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Leave request $status.')));

@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 
 import 'package:appwrite/appwrite.dart';
 import 'package:appwrite/models.dart' as models;
@@ -298,6 +298,35 @@ class AdminHierarchyService {
     return [];
   }
 
+  /// Classes where [username] is currently the head admin (L3) or
+  /// supervisor (L2). Used to block suspending/deleting an admin who still
+  /// owns classes, so they don't silently orphan.
+  static Future<List<models.Document>> findOwnedClasses(
+    String username,
+  ) async {
+    final found = <String, models.Document>{};
+
+    final byHead = await AppwriteService.databases.listDocuments(
+      databaseId: databaseId,
+      collectionId: classesCollection,
+      queries: [Query.equal('headAdminId', username), Query.limit(200)],
+    );
+    for (final d in byHead.documents) {
+      found[d.$id] = d;
+    }
+
+    final bySupervisor = await AppwriteService.databases.listDocuments(
+      databaseId: databaseId,
+      collectionId: classesCollection,
+      queries: [Query.equal('supervisorId', username), Query.limit(200)],
+    );
+    for (final d in bySupervisor.documents) {
+      found[d.$id] = d;
+    }
+
+    return found.values.toList();
+  }
+
   static Future<void> _removeManagedClass(
     String l3Username,
     String classDocId,
@@ -324,23 +353,28 @@ class AdminHierarchyService {
   static Future<bool> patchClassAssignments({
     required String classDocId,
     required ClassAssignments assignments,
+    bool isDean = false,
   }) async {
     if (!assignments.hasHead && !assignments.hasSupervisor) return true;
     try {
+      final docData = <String, dynamic>{
+        if (assignments.headAdminId != null)
+          'headAdminId': assignments.headAdminId,
+        if (assignments.headAdminName != null)
+          'headAdminName': assignments.headAdminName,
+        if (assignments.supervisorId != null)
+          'supervisorId': assignments.supervisorId,
+        if (assignments.supervisorName != null)
+          'supervisorName': assignments.supervisorName,
+      };
+      if (isDean) {
+        docData['actingAs'] = 'dean';
+      }
       await AppwriteService.databases.updateDocument(
         databaseId: databaseId,
         collectionId: classesCollection,
         documentId: classDocId,
-        data: {
-          if (assignments.headAdminId != null)
-            'headAdminId': assignments.headAdminId,
-          if (assignments.headAdminName != null)
-            'headAdminName': assignments.headAdminName,
-          if (assignments.supervisorId != null)
-            'supervisorId': assignments.supervisorId,
-          if (assignments.supervisorName != null)
-            'supervisorName': assignments.supervisorName,
-        },
+        data: docData,
       );
       return true;
     } catch (_) {
@@ -387,6 +421,7 @@ class AdminHierarchyService {
     String? supervisorId,
     String? supervisorName,
     ClassAssignments? previous,
+    bool isDean = false,
   }) async {
     final prev = previous ?? readAssignments(classData);
     final next = ClassAssignments(
@@ -401,14 +436,19 @@ class AdminHierarchyService {
     final geo = geoFromBoundary(classData['boundary']);
     final boundaryJson = encodeBoundaryWithAssignments(geo, next);
 
+    final docData = <String, dynamic>{'boundary': boundaryJson};
+    if (isDean) {
+      docData['actingAs'] = 'dean';
+    }
+
     await AppwriteService.databases.updateDocument(
       databaseId: databaseId,
       collectionId: classesCollection,
       documentId: classDocId,
-      data: {'boundary': boundaryJson},
+      data: docData,
     );
 
-    await patchClassAssignments(classDocId: classDocId, assignments: next);
+    await patchClassAssignments(classDocId: classDocId, assignments: next, isDean: isDean);
 
     if (prev.headAdminId != null && prev.headAdminId != next.headAdminId) {
       await _removeManagedClass(prev.headAdminId!, classDocId);
@@ -419,6 +459,39 @@ class AdminHierarchyService {
       l1AdminId: l1AdminId,
       assignments: next,
     );
+  }
+
+  /// Usernames of the admin(s) allowed to approve a leave request from
+  /// [requesterId] at [requesterLevel]. Level 3 approvers are the
+  /// supervisor(s) of the requester's own classes; Level 2's approver is
+  /// whichever L1 they report to; Level 1 routes to the Dean.
+  static Future<List<String>> resolveApprovers({
+    required String requesterId,
+    required int requesterLevel,
+  }) async {
+    if (requesterLevel == 1) return const ['dean'];
+
+    if (requesterLevel == 2) {
+      final l1 = await resolveReportingL1(requesterId);
+      return l1.id != null && l1.id!.isNotEmpty ? [l1.id!] : const [];
+    }
+
+    if (requesterLevel == 3) {
+      final classes = await fetchClassesForAdmin(
+        adminId: requesterId,
+        adminLevel: 3,
+      );
+      final supervisors = <String>{};
+      for (final classDoc in classes) {
+        final supervisorId = readAssignments(classDoc.data).supervisorId;
+        if (supervisorId != null && supervisorId.isNotEmpty) {
+          supervisors.add(supervisorId);
+        }
+      }
+      return supervisors.toList();
+    }
+
+    return const [];
   }
 
   static String displayName(models.Document doc) {

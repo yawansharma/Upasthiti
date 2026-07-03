@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'app_theme.dart';
 import 'services/leave_service.dart';
+import 'services/admin_hierarchy_service.dart';
 
 class LeaveRequestPage extends StatefulWidget {
   final String userId;
@@ -45,6 +46,26 @@ class _LeaveRequestPageState extends State<LeaveRequestPage> {
     setState(() => _loading = true);
     try {
       // Logic: Request goes to person at Level X - 1 (lower number = higher rank)
+      final approvers = await AdminHierarchyService.resolveApprovers(
+        requesterId: widget.userId,
+        requesterLevel: widget.userLevel,
+      );
+      if (approvers.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                "No approver could be found for your account yet "
+                "(you may not be assigned to a supervisor). Contact your "
+                "institution admin before submitting leave.",
+              ),
+            ),
+          );
+          setState(() => _loading = false);
+        }
+        return;
+      }
+
       await LeaveService.submitRequest(
         userId: widget.userId,
         userName: widget.userName,
@@ -53,6 +74,7 @@ class _LeaveRequestPageState extends State<LeaveRequestPage> {
         endDate: _endDate,
         reason: _reasonCtrl.text.trim(),
         approverLevel: widget.userLevel - 1,
+        approverId: approvers.first,
       );
 
       if (mounted) {

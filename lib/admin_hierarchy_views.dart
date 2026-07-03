@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:appwrite/models.dart' as models;
 import 'package:google_fonts/google_fonts.dart';
 import 'services/admin_hierarchy_service.dart';
@@ -285,7 +285,7 @@ class _L2TeamTabState extends State<L2TeamTab> {
                 fontWeight: FontWeight.bold),
           ),
           if (_reportsToL1Id != null && _reportsToL1Id!.isNotEmpty)
-            Text('Level 1 â€¢ $_reportsToL1Id',
+            Text('Institution Admin • $_reportsToL1Id',
                 style: GoogleFonts.poppins(
                     color: Colors.white60, fontSize: 12)),
         ],
@@ -428,6 +428,7 @@ Future<void> showClassStaffAssignmentSheet({
   required models.Document classDoc,
   required String l1AdminId,
   VoidCallback? onSaved,
+  bool isDean = false,
 }) async {
   final classData = classDoc.data;
   final className = classData['className'] as String? ?? 'Class';
@@ -632,6 +633,7 @@ Future<void> showClassStaffAssignmentSheet({
                               supervisorId: selectedL2Id,
                               supervisorName: supName,
                               previous: current,
+                              isDean: isDean,
                             );
                             if (ctx.mounted) Navigator.pop(ctx);
                             onSaved?.call();
