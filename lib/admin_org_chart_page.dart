@@ -267,7 +267,7 @@ class _AdminOrgChartPageState extends State<AdminOrgChartPage> {
         ),
         const SizedBox(height: 4),
         Text(
-          "Operate institution-wide, outside the L1/L2/L3 chain",
+          "Operate institution-wide, outside the standard admin hierarchy",
           style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade600),
         ),
         const SizedBox(height: 14),

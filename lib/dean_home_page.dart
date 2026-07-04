@@ -1247,11 +1247,11 @@ class _AdminListTabState extends State<_AdminListTab> {
       'Institution Admin', 'Dept. Head (HoD)', 'Team Leader',
       'Office Admin', 'Event Admin', 'HR Admin', 'Security Admin',
     ];
-    const roleShort = ['L1', 'L2', 'L3', 'Office', 'Event', 'HR', 'Security'];
+    const roleShort = ['Inst.', 'Dept.', 'Team', 'Office', 'Event', 'HR', 'Security'];
     const roleSubtitles = [
-      'L1 — Full institutional oversight',
-      'L2 — Department management',
-      'L3 — Class-level control',
+      'Institution Admin — Full institutional oversight',
+      'Dept. Head (HoD) — Department management',
+      'Team Leader — Class-level control',
       'Biometrics & attendance records',
       'Exclusive event hosting & QR scanning',
       'Leave requests & registration approvals',
