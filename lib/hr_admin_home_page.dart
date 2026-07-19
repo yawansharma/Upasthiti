@@ -14,6 +14,7 @@ import 'main.dart';
 import 'services/appwrite_service.dart';
 import 'services/leave_service.dart';
 import 'components/user_avatar.dart';
+import 'components/admin_presence_card.dart';
 
 const Color _kHRAccent = Color(0xFF8A7A2A);
 final String _kDb = AppwriteService.databaseId;
@@ -46,6 +47,21 @@ class _HrAdminHomePageState extends State<HrAdminHomePage> {
         child: Column(
           children: [
             _buildHeader(context),
+            AdminPresenceCard(
+              adminId: widget.adminId,
+              adminName: widget.adminName,
+              role: 'hrAdmin',
+              level: 0,
+              department: widget.adminDepartment,
+              accent: _kHRAccent,
+              onSignedOut: () {
+                Navigator.of(context).popUntil((r) => r.isFirst);
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (_) => const LoginPage()),
+                );
+              },
+            ),
             Expanded(
               child: Container(
                 width: double.infinity,

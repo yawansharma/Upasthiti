@@ -83,7 +83,7 @@ class _AdminOrgChartPageState extends State<AdminOrgChartPage> {
       // 1b. Fetch cross-cutting roles separately — they have no
       // head/supervisor relationship to nest in the tree above.
       final specialResult = await AppwriteService.databases.listDocuments(
-        databaseId: '6a2c10dc000d5e50f314',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'users',
         queries: [
           Query.equal('role', _kSpecialRoles),
@@ -112,12 +112,13 @@ class _AdminOrgChartPageState extends State<AdminOrgChartPage> {
       );
       final classes = classesResult.documents;
 
-      // 3. Map parent-child relationships based on classes
+      // 3. Map parent-child relationships. Legacy class-derived links first,
+      //    then let the explicit parentAdminId on each admin doc override.
       final Map<String, String> parentOf = {};
       for (final classDoc in classes) {
         final data = classDoc.data;
         final createdBy = data['createdBy'] as String? ?? '';
-        
+
         final assignments = AdminHierarchyService.readAssignments(data);
         final headAdminId = assignments.headAdminId ?? ''; // L3
         final supervisorId = assignments.supervisorId ?? ''; // L2
@@ -129,6 +130,14 @@ class _AdminOrgChartPageState extends State<AdminOrgChartPage> {
           if (headAdminId.isNotEmpty) {
             parentOf[headAdminId] = createdBy;
           }
+        }
+      }
+      // Explicit parent links (set by the Office Admin) take precedence.
+      for (final doc in admins) {
+        final id = doc.data['username'] as String? ?? '';
+        final parent = doc.data['parentAdminId'] as String?;
+        if (id.isNotEmpty && parent != null && parent.isNotEmpty) {
+          parentOf[id] = parent;
         }
       }
 
@@ -237,12 +246,7 @@ class _AdminOrgChartPageState extends State<AdminOrgChartPage> {
                                   const SizedBox(height: 16),
                               ],
                               for (int i = 0; i < _roots.length; i++)
-                                _buildNode(
-                                  _roots[i],
-                                  0,
-                                  i == _roots.length - 1,
-                                  [],
-                                ),
+                                _buildNode(_roots[i], 0),
                             ],
                           ),
               ),
@@ -338,32 +342,11 @@ class _AdminOrgChartPageState extends State<AdminOrgChartPage> {
     );
   }
 
-  Widget _buildPrefixText(int depth, bool isLast, List<bool> isLastList) {
-    if (depth == 0) return const SizedBox.shrink();
-    String prefix = "";
-    for (int i = 0; i < depth - 1; i++) {
-      prefix += isLastList[i] ? "        " : "   â”‚    ";
-    }
-    prefix += isLast ? "   â””â”€â”€ " : "   â”œâ”€â”€ ";
-    return Padding(
-      padding: const EdgeInsets.only(top: 24),
-      child: Text(
-        prefix,
-        style: const TextStyle(
-          fontFamily: 'monospace',
-          color: Colors.grey,
-          fontSize: 18,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNode(OrgNode node, int depth, bool isLast, List<bool> isLastList) {
+  Widget _buildNode(OrgNode node, int depth) {
     final isMe = node.id == widget.currentAdminId;
-    
-    String roleLabel = "Admin";
-    Color roleColor = Colors.purple;
+
+    String roleLabel = "Institution Admin";
+    Color roleColor = const Color(0xFF6A8A73);
     if (node.level == 2) {
       roleLabel = "Head of Department";
       roleColor = const Color(0xFF4E7A8A);
@@ -375,13 +358,19 @@ class _AdminOrgChartPageState extends State<AdminOrgChartPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildPrefixText(depth, isLast, isLastList),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 12),
+        Padding(
+          // Indent each level; a small elbow connector marks nested nodes.
+          padding: EdgeInsets.only(left: depth * 22.0, bottom: 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              if (depth > 0)
+                Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: Icon(Icons.subdirectory_arrow_right,
+                      size: 18, color: Colors.grey.shade400),
+                ),
+              Expanded(
                 child: Container(
                   decoration: BoxDecoration(
                     color: isMe ? roleColor.withValues(alpha: 0.1) : Colors.white,
@@ -400,7 +389,7 @@ class _AdminOrgChartPageState extends State<AdminOrgChartPage> {
                     ],
                   ),
                   child: Padding(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(14),
                     child: Row(
                       children: [
                         UserAvatar(
@@ -410,32 +399,47 @@ class _AdminOrgChartPageState extends State<AdminOrgChartPage> {
                           backgroundColor: roleColor.withValues(alpha: 0.15),
                           foregroundColor: roleColor,
                         ),
-                        const SizedBox(width: 14),
+                        const SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
                                 node.name,
-                                style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black87),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.poppins(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 15,
+                                    color: Colors.black87),
                               ),
                               const SizedBox(height: 2),
                               Text(
                                 node.department,
-                                style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                    color: Colors.grey.shade600, fontSize: 12),
                               ),
                             ],
                           ),
                         ),
+                        const SizedBox(width: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
                             color: roleColor.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
                             roleLabel,
-                            style: TextStyle(color: roleColor, fontSize: 10, fontWeight: FontWeight.bold),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                color: roleColor,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold),
                           ),
                         ),
                       ],
@@ -443,18 +447,11 @@ class _AdminOrgChartPageState extends State<AdminOrgChartPage> {
                   ),
                 ),
               ),
-            ),
-          ],
-        ),
-        if (node.children.isNotEmpty)
-          Column(
-            children: List.generate(node.children.length, (index) {
-              final child = node.children[index];
-              final childIsLast = index == node.children.length - 1;
-              final childIsLastList = List<bool>.from(isLastList)..add(isLast);
-              return _buildNode(child, depth + 1, childIsLast, childIsLastList);
-            }),
+            ],
           ),
+        ),
+        // Recurse into children (L2 under L1, L3 under L2).
+        for (final child in node.children) _buildNode(child, depth + 1),
       ],
     );
   }

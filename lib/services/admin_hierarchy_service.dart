@@ -133,6 +133,41 @@ class AdminHierarchyService {
     return result.documents.first;
   }
 
+  /// The explicit parent admin recorded on [doc] via `parentAdminId`, if any.
+  /// This is the direct L1→L2→L3 link set by the Office Admin; it supersedes
+  /// the legacy class-derived relationship.
+  static ({String? id, String? name}) parentOf(models.Document doc) {
+    final id = doc.data['parentAdminId'] as String?;
+    final name = doc.data['parentAdminName'] as String?;
+    return (
+      id: id != null && id.isNotEmpty ? id : null,
+      name: name != null && name.isNotEmpty ? name : null,
+    );
+  }
+
+  /// Active admins whose explicit parent (`parentAdminId`) is [parentUsername].
+  /// Optionally filter to a specific [level] (e.g. an L1's L2 children).
+  static Future<List<models.Document>> listChildren(
+    String parentUsername, {
+    int? level,
+  }) async {
+    if (parentUsername.isEmpty) return [];
+    final queries = <String>[
+      Query.equal('role', 'admin'),
+      Query.equal('parentAdminId', parentUsername),
+      if (level != null) Query.equal('level', level),
+      Query.limit(200),
+    ];
+    final result = await AppwriteService.databases.listDocuments(
+      databaseId: databaseId,
+      collectionId: usersCollection,
+      queries: queries,
+    );
+    return result.documents
+        .where((d) => d.data['status'] != 'disabled')
+        .toList();
+  }
+
   static Future<List<models.Document>> _listAllClasses({
     int limit = 200,
   }) async {
@@ -187,6 +222,16 @@ class AdminHierarchyService {
   static Future<({String? id, String? name})> resolveReportingL1(
     String l2AdminId,
   ) async {
+    // Prefer the explicit parent link recorded on the L2's own account.
+    final l2 = await findUserByUsername(l2AdminId);
+    if (l2 != null) {
+      final parent = parentOf(l2);
+      if (parent.id != null) {
+        return (id: parent.id, name: parent.name ?? parent.id);
+      }
+    }
+
+    // Legacy fallback: derive from class assignments (first match wins).
     for (final classDoc in await _listAllClasses()) {
       final a = readAssignments(classDoc.data);
       if (a.supervisorId == l2AdminId) {
@@ -477,6 +522,14 @@ class AdminHierarchyService {
     }
 
     if (requesterLevel == 3) {
+      // Prefer the explicit parent link (the L2 this L3 reports to).
+      final l3 = await findUserByUsername(requesterId);
+      if (l3 != null) {
+        final parent = parentOf(l3);
+        if (parent.id != null) return [parent.id!];
+      }
+
+      // Legacy fallback: supervisors of the L3's own classes.
       final classes = await fetchClassesForAdmin(
         adminId: requesterId,
         adminLevel: 3,
@@ -492,6 +545,21 @@ class AdminHierarchyService {
     }
 
     return const [];
+  }
+
+  /// Sets (or clears, with an empty string) the soft presence "report-by"
+  /// deadline an L2 optionally imposes on an L3. Stored as `presenceDeadline`
+  /// (`"HH:mm"`) on the L3's user doc; a late report is flagged `Late`.
+  static Future<void> setPresenceDeadline(
+    String userDocId,
+    String hhmm,
+  ) async {
+    await AppwriteService.databases.updateDocument(
+      databaseId: databaseId,
+      collectionId: usersCollection,
+      documentId: userDocId,
+      data: {'presenceDeadline': hhmm},
+    );
   }
 
   static String displayName(models.Document doc) {

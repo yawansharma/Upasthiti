@@ -13,9 +13,15 @@ import 'package:http/http.dart' as http;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:geolocator/geolocator.dart';
+
 import 'app_theme.dart';
 import 'services/appwrite_service.dart';
+import 'services/admin_presence_service.dart';
 import 'components/user_avatar.dart';
+import 'components/admin_presence_card.dart';
 import 'office_admin_student_attendance_page.dart';
 import 'main.dart';
 
@@ -53,7 +59,10 @@ class _OfficeAdminHomePageState extends State<OfficeAdminHomePage> {
     super.initState();
     _tabs = [
       _OverviewTab(
-          adminId: widget.adminId, department: widget.adminDepartment),
+          adminId: widget.adminId,
+          adminName: widget.adminName,
+          department: widget.adminDepartment),
+      _AdminsTab(adminId: widget.adminId, adminName: widget.adminName),
       _StudentsTab(department: widget.adminDepartment),
       _ReportsTab(department: widget.adminDepartment),
       _BiometricsTab(department: widget.adminDepartment, adminId: widget.adminId),
@@ -150,6 +159,10 @@ class _OfficeAdminHomePageState extends State<OfficeAdminHomePage> {
               activeIcon: Icon(Icons.dashboard),
               label: "Overview"),
           BottomNavigationBarItem(
+              icon: Icon(Icons.admin_panel_settings_outlined),
+              activeIcon: Icon(Icons.admin_panel_settings),
+              label: "Admins"),
+          BottomNavigationBarItem(
               icon: Icon(Icons.people_outline),
               activeIcon: Icon(Icons.people),
               label: "Students"),
@@ -181,8 +194,12 @@ class _OfficeAdminHomePageState extends State<OfficeAdminHomePage> {
 
 class _OverviewTab extends StatefulWidget {
   final String adminId;
+  final String adminName;
   final String department;
-  const _OverviewTab({required this.adminId, required this.department});
+  const _OverviewTab(
+      {required this.adminId,
+      required this.adminName,
+      required this.department});
   @override
   State<_OverviewTab> createState() => _OverviewTabState();
 }
@@ -266,6 +283,21 @@ class _OverviewTabState extends State<_OverviewTab> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     AppTheme.sheetHandle,
+                    AdminPresenceCard(
+                      adminId: widget.adminId,
+                      adminName: widget.adminName,
+                      role: 'officeAdmin',
+                      level: 0,
+                      department: widget.department,
+                      accent: _kOAAccent,
+                      onSignedOut: () {
+                        Navigator.of(context).pushAndRemoveUntil(
+                          MaterialPageRoute(builder: (_) => const LoginPage()),
+                          (route) => false,
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 8),
                     Text("Overview",
                         style: GoogleFonts.poppins(
                             fontSize: 20,
@@ -1980,6 +2012,924 @@ class _AuditTrailTabState extends State<_AuditTrailTab> {
           )
         ]
       )
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tab — Admins (create L1/L2/L3, assign parent, set boundary, export activity)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const List<String> _kDepartments = [
+  "School of Computing (SoC)",
+  "School of Electrical & Electronics Engineering (SEEE)",
+  "School of Mechanical Engineering (SoME)",
+  "School of Civil Engineering (SoCE)",
+  "School of Chemical & Biotechnology (SCBT)",
+  "School of Law",
+  "School of Management (SoM)",
+  "School of Arts, Sciences, Humanities & Education (SASHE)",
+];
+
+String _roleLevelLabel(String? role, dynamic level) {
+  if (role == 'admin') {
+    switch (level) {
+      case 1:
+        return 'Institution Admin';
+      case 2:
+        return 'Head of Department';
+      case 3:
+        return 'Team Leader';
+      default:
+        return 'Admin';
+    }
+  }
+  switch (role) {
+    case 'officeAdmin':
+      return 'Office Admin';
+    case 'eventAdmin':
+      return 'Event Admin';
+    case 'hrAdmin':
+      return 'HR Admin';
+    case 'securityAdmin':
+      return 'Security Admin';
+    default:
+      return role ?? 'Admin';
+  }
+}
+
+class _AdminsTab extends StatefulWidget {
+  final String adminId;
+  final String adminName;
+  const _AdminsTab({required this.adminId, required this.adminName});
+  @override
+  State<_AdminsTab> createState() => _AdminsTabState();
+}
+
+class _AdminsTabState extends State<_AdminsTab> {
+  List<models.Document> _admins = [];
+  bool _loading = true;
+  Map<String, dynamic>? _boundary;
+
+  List<models.Document> get _l1s =>
+      _admins.where((d) => d.data['level'] == 1 && d.data['status'] != 'disabled').toList();
+  List<models.Document> get _l2s =>
+      _admins.where((d) => d.data['level'] == 2 && d.data['status'] != 'disabled').toList();
+
+  @override
+  void initState() {
+    super.initState();
+    _fetch();
+  }
+
+  Future<void> _fetch() async {
+    try {
+      final result = await AppwriteService.databases.listDocuments(
+        databaseId: _kDb,
+        collectionId: 'users',
+        queries: [
+          Query.equal('role', 'admin'),
+          Query.limit(500),
+        ],
+      );
+      final boundary = await AdminPresenceService.getBoundaryConfig();
+      if (mounted) {
+        setState(() {
+          _admins = result.documents;
+          _boundary = boundary;
+          _loading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _snack(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  // ── Create L1/L2/L3 with parent assignment ─────────────────────────────
+  void _showCreateSheet() {
+    const roleLabels = ['Institution Admin', 'Head of Department', 'Team Leader'];
+    const roleShort = ['Institution', 'Dept. Head', 'Team Leader'];
+    const levels = [1, 2, 3];
+    const roleIcons = [
+      Icons.account_balance_outlined,
+      Icons.domain_outlined,
+      Icons.class_outlined,
+    ];
+
+    final usernameCtrl = TextEditingController();
+    final nameCtrl = TextEditingController();
+    final passCtrl = TextEditingController();
+    String selectedDept = _kDepartments.first;
+    int selectedIdx = 0;
+    models.Document? selectedParent;
+    bool saving = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) {
+          final level = levels[selectedIdx];
+          final parents = level == 2
+              ? _l1s
+              : level == 3
+                  ? _l2s
+                  : <models.Document>[];
+          final needsParent = level == 2 || level == 3;
+          // Reset parent selection when it no longer belongs to the list.
+          if (selectedParent != null && !parents.any((p) => p.$id == selectedParent!.$id)) {
+            selectedParent = null;
+          }
+
+          return Padding(
+            padding: EdgeInsets.only(
+                bottom: MediaQuery.of(ctx).viewInsets.bottom,
+                left: 24,
+                right: 24,
+                top: 24),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(child: AppTheme.sheetHandle),
+                  Text("Onboard Admin",
+                      style: GoogleFonts.poppins(
+                          fontSize: 20, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  Text("Create a hierarchy admin and assign who they report to.",
+                      style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                  const SizedBox(height: 18),
+
+                  // Role selector
+                  Row(
+                    children: List.generate(3, (i) {
+                      final selected = selectedIdx == i;
+                      return Expanded(
+                        child: GestureDetector(
+                          onTap: () => setSheetState(() => selectedIdx = i),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            margin: EdgeInsets.only(right: i < 2 ? 8 : 0),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            decoration: BoxDecoration(
+                              color: selected ? _kOAAccent : Colors.grey.shade50,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                  color: selected
+                                      ? _kOAAccent
+                                      : Colors.grey.shade200,
+                                  width: 1.5),
+                            ),
+                            child: Column(
+                              children: [
+                                Icon(roleIcons[i],
+                                    size: 20,
+                                    color:
+                                        selected ? Colors.white : _kOAAccent),
+                                const SizedBox(height: 5),
+                                Text(roleShort[i],
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: selected
+                                            ? Colors.white
+                                            : _kOAAccent)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                  const SizedBox(height: 18),
+
+                  TextField(
+                    controller: usernameCtrl,
+                    decoration: InputDecoration(
+                        labelText: 'Admin Username (ID)',
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12))),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: nameCtrl,
+                    decoration: InputDecoration(
+                        labelText: 'Full Name',
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12))),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: passCtrl,
+                    obscureText: true,
+                    decoration: InputDecoration(
+                        labelText: 'Initial Password',
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12))),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    isExpanded: true,
+                    value: selectedDept,
+                    decoration: InputDecoration(
+                        labelText: 'Department',
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12))),
+                    items: _kDepartments
+                        .map((d) => DropdownMenuItem(
+                            value: d,
+                            child:
+                                Text(d, overflow: TextOverflow.ellipsis)))
+                        .toList(),
+                    onChanged: (v) => setSheetState(() => selectedDept = v!),
+                  ),
+
+                  // Parent picker
+                  if (needsParent) ...[
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<models.Document>(
+                      isExpanded: true,
+                      value: selectedParent,
+                      decoration: InputDecoration(
+                          labelText: level == 2
+                              ? 'Reports to (Institution Admin)'
+                              : 'Reports to (Head of Department)',
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12))),
+                      items: parents
+                          .map((p) => DropdownMenuItem(
+                                value: p,
+                                child: Text(
+                                  "${p.data['name'] ?? p.data['username']} · ${p.data['department'] ?? ''}",
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ))
+                          .toList(),
+                      onChanged: (v) => setSheetState(() => selectedParent = v),
+                    ),
+                    if (parents.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          level == 2
+                              ? 'No Institution Admins exist yet. Create one first.'
+                              : 'No Heads of Department exist yet. Create one first.',
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.orange.shade700),
+                        ),
+                      ),
+                  ] else
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Text('Institution Admins report to the Dean.',
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.grey.shade500)),
+                    ),
+
+                  const SizedBox(height: 22),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton(
+                      onPressed: saving
+                          ? null
+                          : () async {
+                              if (usernameCtrl.text.trim().isEmpty ||
+                                  passCtrl.text.trim().isEmpty) {
+                                _snack('Username and password are required.');
+                                return;
+                              }
+                              if (needsParent && selectedParent == null) {
+                                _snack('Please choose who this admin reports to.');
+                                return;
+                              }
+                              setSheetState(() => saving = true);
+                              try {
+                                final exists = await AppwriteService.databases
+                                    .listDocuments(
+                                  databaseId: _kDb,
+                                  collectionId: 'users',
+                                  queries: [
+                                    Query.equal(
+                                        'username', usernameCtrl.text.trim()),
+                                  ],
+                                );
+                                if (exists.documents.isNotEmpty) {
+                                  setSheetState(() => saving = false);
+                                  _snack('Username already exists.');
+                                  return;
+                                }
+
+                                final docData = <String, dynamic>{
+                                  'username': usernameCtrl.text.trim(),
+                                  'name': nameCtrl.text.trim().isNotEmpty
+                                      ? nameCtrl.text.trim()
+                                      : usernameCtrl.text.trim(),
+                                  'password': AppwriteService.hashPassword(
+                                      passCtrl.text.trim()),
+                                  'role': 'admin',
+                                  'level': level,
+                                  'department': selectedDept,
+                                  'status': 'active',
+                                  'managedClasses': <String>[],
+                                  'createdAt': DateTime.now().toIso8601String(),
+                                };
+                                if (needsParent && selectedParent != null) {
+                                  docData['parentAdminId'] =
+                                      selectedParent!.data['username'];
+                                  docData['parentAdminName'] =
+                                      selectedParent!.data['name'] ??
+                                          selectedParent!.data['username'];
+                                }
+
+                                await AppwriteService.databases.createDocument(
+                                  databaseId: _kDb,
+                                  collectionId: 'users',
+                                  documentId: ID.unique(),
+                                  data: docData,
+                                );
+
+                                if (!mounted) return;
+                                Navigator.pop(ctx);
+                                _fetch();
+                                _snack('${roleLabels[selectedIdx]} onboarded.');
+                              } catch (e) {
+                                setSheetState(() => saving = false);
+                                _snack('Error: $e');
+                              }
+                            },
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: _kOAAccent,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12))),
+                      child: saving
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                  color: Colors.white, strokeWidth: 2))
+                          : Text("Create ${roleShort[selectedIdx]}",
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 15)),
+                    ),
+                  ),
+                  const SizedBox(height: 30),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // ── Reassign an existing admin's parent ────────────────────────────────
+  Future<void> _editParent(models.Document doc) async {
+    final level = doc.data['level'];
+    if (level == 1) {
+      _snack('Institution Admins report to the Dean — no parent to set.');
+      return;
+    }
+    final parents = level == 2 ? _l1s : _l2s;
+    if (parents.isEmpty) {
+      _snack(level == 2
+          ? 'No Institution Admins to assign.'
+          : 'No Heads of Department to assign.');
+      return;
+    }
+    final currentParentId = doc.data['parentAdminId'] as String?;
+    models.Document? chosen = parents.firstWhere(
+      (p) => p.data['username'] == currentParentId,
+      orElse: () => parents.first,
+    );
+
+    final result = await showDialog<models.Document>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(level == 2 ? 'Assign Institution Admin' : 'Assign Head of Department'),
+        content: StatefulBuilder(
+          builder: (dctx, setD) => DropdownButtonFormField<models.Document>(
+            isExpanded: true,
+            value: chosen,
+            items: parents
+                .map((p) => DropdownMenuItem(
+                      value: p,
+                      child: Text(
+                        "${p.data['name'] ?? p.data['username']} · ${p.data['department'] ?? ''}",
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ))
+                .toList(),
+            onChanged: (v) => setD(() => chosen = v),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dctx), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: _kOAAccent),
+            onPressed: () => Navigator.pop(dctx, chosen),
+            child: const Text('Assign', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (result == null) return;
+    try {
+      await AppwriteService.databases.updateDocument(
+        databaseId: _kDb,
+        collectionId: 'users',
+        documentId: doc.$id,
+        data: {
+          'parentAdminId': result.data['username'],
+          'parentAdminName': result.data['name'] ?? result.data['username'],
+        },
+      );
+      _fetch();
+      _snack('Reporting line updated.');
+    } catch (e) {
+      _snack('Failed: $e');
+    }
+  }
+
+  // ── Presence boundary picker (map) ─────────────────────────────────────
+  Future<void> _setBoundary() async {
+    final picked = await _openBoundaryPicker(_boundary);
+    if (picked == null) return;
+    try {
+      await AdminPresenceService.setBoundaryConfig(
+        lat: picked['lat'],
+        lng: picked['lng'],
+        radiusMeters: picked['radiusMeters'],
+        updatedBy: widget.adminId,
+      );
+      if (mounted) setState(() => _boundary = picked);
+      _snack('Presence boundary saved.');
+    } catch (e) {
+      _snack('Failed to save boundary: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>?> _openBoundaryPicker(
+      Map<String, dynamic>? existing) async {
+    LatLng pos;
+    if (existing != null) {
+      pos = LatLng((existing['lat'] as num).toDouble(),
+          (existing['lng'] as num).toDouble());
+    } else {
+      try {
+        final loc = await Geolocator.getCurrentPosition(
+            desiredAccuracy: LocationAccuracy.high);
+        pos = LatLng(loc.latitude, loc.longitude);
+      } catch (_) {
+        pos = const LatLng(20.59, 78.96);
+      }
+    }
+    double radius =
+        existing != null ? (existing['radiusMeters'] as num).toDouble() : 100.0;
+    LatLng current = pos;
+    final mapController = MapController();
+    if (!mounted) return null;
+
+    return showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        contentPadding: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        content: SizedBox(
+          height: 560,
+          width: 600,
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: const BoxDecoration(
+                  color: _kOAAccent,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.my_location, color: Colors.white, size: 22),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text("Set Presence Boundary",
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15)),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white),
+                      onPressed: () => Navigator.pop(dialogCtx),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: StatefulBuilder(builder: (_, setSt) {
+                  return Stack(
+                    children: [
+                      FlutterMap(
+                        mapController: mapController,
+                        options: MapOptions(
+                          initialCenter: pos,
+                          initialZoom: 16,
+                          onTap: (_, p) => setSt(() => current = p),
+                        ),
+                        children: [
+                          TileLayer(
+                            urlTemplate:
+                                'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            userAgentPackageName: 'com.virtualvision.admin',
+                          ),
+                          CircleLayer(circles: [
+                            CircleMarker(
+                              point: current,
+                              radius: radius,
+                              useRadiusInMeter: true,
+                              color: _kOAAccent.withValues(alpha: 0.18),
+                              borderColor: _kOAAccent,
+                              borderStrokeWidth: 2,
+                            ),
+                          ]),
+                          MarkerLayer(markers: [
+                            Marker(
+                              point: current,
+                              width: 40,
+                              height: 40,
+                              child: const Icon(Icons.location_on,
+                                  color: Colors.red, size: 40),
+                            ),
+                          ]),
+                        ],
+                      ),
+                      Positioned(
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        child: Container(
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            borderRadius:
+                                BorderRadius.vertical(top: Radius.circular(20)),
+                          ),
+                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(children: [
+                                const Icon(Icons.my_location,
+                                    size: 13, color: Colors.grey),
+                                const SizedBox(width: 6),
+                                Text(
+                                  "${current.latitude.toStringAsFixed(5)}, ${current.longitude.toStringAsFixed(5)}",
+                                  style: const TextStyle(
+                                      fontSize: 12, fontWeight: FontWeight.w600),
+                                ),
+                              ]),
+                              const SizedBox(height: 6),
+                              Row(children: [
+                                const Icon(Icons.radio_button_checked,
+                                    size: 13, color: _kOAAccent),
+                                const SizedBox(width: 6),
+                                Text("Radius: ${radius.toStringAsFixed(0)} m",
+                                    style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600)),
+                                Expanded(
+                                  child: Slider(
+                                    value: radius,
+                                    min: 30,
+                                    max: 500,
+                                    divisions: 47,
+                                    activeColor: _kOAAccent,
+                                    onChanged: (v) => setSt(() => radius = v),
+                                  ),
+                                ),
+                              ]),
+                              const SizedBox(height: 6),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: _kOAAccent,
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10)),
+                                  ),
+                                  onPressed: () => Navigator.pop(dialogCtx, {
+                                    'lat': current.latitude,
+                                    'lng': current.longitude,
+                                    'radiusMeters': radius,
+                                  }),
+                                  child: const Text("Confirm Boundary",
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                }),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Export admin activity to Excel ─────────────────────────────────────
+  Future<void> _exportActivity() async {
+    final range = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2024),
+      lastDate: DateTime.now(),
+      builder: (ctx, child) => Theme(
+        data: Theme.of(ctx)
+            .copyWith(colorScheme: const ColorScheme.light(primary: _kOAAccent)),
+        child: child!,
+      ),
+    );
+    if (range == null) return;
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) =>
+          const Center(child: CircularProgressIndicator(color: _kOAAccent)),
+    );
+
+    try {
+      final startKey = AdminPresenceService.dateKey(range.start);
+      final endKey = AdminPresenceService.dateKey(range.end);
+      final res = await AppwriteService.databases.listDocuments(
+        databaseId: _kDb,
+        collectionId: AdminPresenceService.logsCollection,
+        queries: [
+          Query.greaterThanEqual('date', startKey),
+          Query.lessThanEqual('date', endKey),
+          Query.orderAsc('date'),
+          Query.limit(5000),
+        ],
+      );
+
+      if (res.documents.isEmpty) {
+        if (mounted) Navigator.pop(context);
+        _snack('No admin activity found for the selected range.');
+        return;
+      }
+
+      final excel = Excel.createExcel();
+      final sheet = excel['Admin Activity'];
+      excel.setDefaultSheet('Admin Activity');
+      const headers = [
+        'Admin Name',
+        'Admin ID',
+        'Role / Level',
+        'Reports To',
+        'Department',
+        'Date',
+        'Login Time',
+        'Presence Time',
+        'Sign-out Time',
+        'Status',
+        'In Geofence',
+        'Face Verified',
+      ];
+      sheet.appendRow(headers.map((h) => TextCellValue(h)).toList());
+
+      String fmt(String? iso) {
+        if (iso == null || iso.isEmpty) return '';
+        try {
+          return DateFormat('hh:mm a').format(DateTime.parse(iso));
+        } catch (_) {
+          return '';
+        }
+      }
+
+      for (final d in res.documents) {
+        final m = d.data;
+        sheet.appendRow([
+          TextCellValue(m['adminName'] as String? ?? ''),
+          TextCellValue(m['adminId'] as String? ?? ''),
+          TextCellValue(_roleLevelLabel(m['role'] as String?, m['level'])),
+          TextCellValue(m['parentAdminId'] as String? ?? ''),
+          TextCellValue(m['department'] as String? ?? ''),
+          TextCellValue(m['date'] as String? ?? ''),
+          TextCellValue(fmt(m['loginTime'] as String?)),
+          TextCellValue(fmt(m['presenceTime'] as String?)),
+          TextCellValue(fmt(m['signOutTime'] as String?)),
+          TextCellValue((m['status'] as String?)?.isNotEmpty == true
+              ? m['status'] as String
+              : 'Not reported'),
+          TextCellValue((m['isWithinGeofence'] as bool? ?? false) ? 'Yes' : 'No'),
+          TextCellValue((m['faceVerified'] as bool? ?? false) ? 'Yes' : 'No'),
+        ]);
+      }
+      excel.delete('Sheet1');
+
+      final bytes = excel.encode();
+      if (bytes == null) throw Exception('Failed to encode Excel');
+
+      final dir = Platform.isWindows
+          ? Directory('${Platform.environment['USERPROFILE']}\\Downloads')
+          : (await getExternalStorageDirectory() ??
+              await getApplicationDocumentsDirectory());
+      final ts = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+      final path = '${dir.path}/admin_activity_$ts.xlsx';
+      await File(path).writeAsBytes(bytes);
+
+      if (mounted) Navigator.pop(context);
+      _snack('Saved: admin_activity_$ts.xlsx');
+    } catch (e) {
+      if (mounted) Navigator.pop(context);
+      _snack('Export failed: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: _kOAAccent,
+        foregroundColor: Colors.white,
+        onPressed: _showCreateSheet,
+        icon: const Icon(Icons.person_add_alt_1_rounded),
+        label: const Text("Onboard Admin",
+            style: TextStyle(fontWeight: FontWeight.bold)),
+      ),
+      body: Container(
+      width: double.infinity,
+      decoration: AppTheme.bottomSheet,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                AppTheme.sheetHandle,
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text("Admin Management",
+                          style: GoogleFonts.poppins(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87)),
+                    ),
+                    IconButton(
+                      onPressed: _setBoundary,
+                      tooltip: 'Set presence boundary',
+                      icon: const Icon(Icons.map_outlined, color: _kOAAccent),
+                    ),
+                    IconButton(
+                      onPressed: _exportActivity,
+                      tooltip: 'Export admin activity',
+                      icon: const Icon(Icons.download_rounded, color: _kOAAccent),
+                    ),
+                  ],
+                ),
+                Text(
+                  _boundary == null
+                      ? 'No presence boundary set yet — tap the map icon to set one.'
+                      : 'Boundary: ${(_boundary!['radiusMeters'] as num).toStringAsFixed(0)} m radius set.',
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: _boundary == null
+                          ? Colors.orange.shade700
+                          : Colors.black45),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator(color: _kOAAccent))
+                : _admins.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.shield_outlined,
+                                size: 56, color: Colors.grey.shade300),
+                            const SizedBox(height: 10),
+                            Text("No hierarchy admins yet",
+                                style: GoogleFonts.poppins(
+                                    fontSize: 15, color: Colors.black45)),
+                          ],
+                        ),
+                      )
+                    : RefreshIndicator(
+                        color: _kOAAccent,
+                        onRefresh: _fetch,
+                        child: ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(20, 4, 20, 90),
+                          itemCount: _admins.length,
+                          itemBuilder: (ctx, i) => _adminCard(_admins[i]),
+                        ),
+                      ),
+          ),
+        ],
+      ),
+      ),
+    );
+  }
+
+  Widget _adminCard(models.Document doc) {
+    final data = doc.data;
+    final name = data['name'] as String? ?? data['username'] as String? ?? '';
+    final level = data['level'];
+    final parent = data['parentAdminName'] as String? ?? data['parentAdminId'] as String?;
+    final isDisabled = data['status'] == 'disabled';
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 20,
+              backgroundColor: _kOAAccent.withValues(alpha: 0.12),
+              child: Text('L${level ?? '?'}',
+                  style: const TextStyle(
+                      color: _kOAAccent, fontWeight: FontWeight.bold, fontSize: 12)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(name,
+                      style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: Colors.black87),
+                      overflow: TextOverflow.ellipsis),
+                  Text(_roleLevelLabel(data['role'] as String?, level),
+                      style: TextStyle(
+                          fontSize: 11, color: Colors.grey.shade600)),
+                  Text(
+                    level == 1
+                        ? 'Reports to: Dean'
+                        : (parent != null && parent.isNotEmpty
+                            ? 'Reports to: $parent'
+                            : 'Reports to: — (unassigned)'),
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: (level != 1 && (parent == null || parent.isEmpty))
+                            ? Colors.orange.shade700
+                            : Colors.grey.shade500),
+                  ),
+                ],
+              ),
+            ),
+            if (isDisabled)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                margin: const EdgeInsets.only(right: 6),
+                decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(6)),
+                child: Text('Disabled',
+                    style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.red.shade700,
+                        fontWeight: FontWeight.bold)),
+              ),
+            if (level != 1)
+              TextButton(
+                onPressed: () => _editParent(doc),
+                style: TextButton.styleFrom(
+                    foregroundColor: _kOAAccent,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: Size.zero),
+                child: const Text('Edit', style: TextStyle(fontSize: 12)),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -22,7 +22,9 @@ import 'admin_hierarchy_views.dart';
 import 'admin_approval_requests_page.dart';
 import 'admin_org_chart_page.dart';
 import 'admin_student_directory_page.dart';
+import 'event_management_page.dart';
 import 'components/user_avatar.dart';
+import 'components/admin_presence_card.dart';
 
 // =============================================================================
 // AdminHomePage Ã¢â‚¬â€ 3-tab shell: Classes | Analytics | Settings
@@ -49,6 +51,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
   DateTimeRange? _dateRange;
   String? _classFilter;
   String? _adminDepartment;
+  String? _adminParentId;
 
   // Classes tab state
   List<models.Document> _classes = [];
@@ -111,6 +114,8 @@ class _AdminHomePageState extends State<AdminHomePage> {
         setState(() {
           _adminDepartment =
               res.documents.first.data['department'] as String?;
+          _adminParentId =
+              res.documents.first.data['parentAdminId'] as String?;
         });
       }
     } catch (_) {
@@ -302,6 +307,26 @@ class _AdminHomePageState extends State<AdminHomePage> {
                 ),
                 child: Column(
                   children: [
+                    if (!widget.isDean)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: AdminPresenceCard(
+                          adminId: widget.adminId,
+                          adminName: widget.adminName,
+                          role: 'admin',
+                          level: widget.adminLevel,
+                          department: _adminDepartment ?? '',
+                          parentAdminId: _adminParentId,
+                          accent: AppTheme.kGreen,
+                          onSignedOut: () {
+                            Navigator.pushAndRemoveUntil(
+                              context,
+                              MaterialPageRoute(builder: (_) => const LoginPage()),
+                              (route) => false,
+                            );
+                          },
+                        ),
+                      ),
                     Expanded(
                       child: ClipRRect(
                         borderRadius: const BorderRadius.vertical(
@@ -407,6 +432,27 @@ class _AdminHomePageState extends State<AdminHomePage> {
         },
       ),
     );
+
+    // Event Management: Level 1 Institution Admins
+    if (widget.adminLevel == 1) {
+      actions.add(
+        IconButton(
+          icon: const Icon(Icons.event_note_outlined, color: Colors.white),
+          tooltip: "Manage Events",
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => EventManagementPage(
+                  adminId: widget.adminId,
+                  adminName: widget.adminName,
+                ),
+              ),
+            );
+          },
+        ),
+      );
+    }
 
     // Student Directory: Level 2 and Level 3 Admins
     if (widget.adminLevel == 2 || widget.adminLevel == 3) {

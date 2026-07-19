@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'app_theme.dart';
 import 'main.dart';
 import 'services/appwrite_service.dart';
+import 'components/admin_presence_card.dart';
 
 const Color _kEAAccent = Color(0xFF3D6B8A);
 const _kDb = '6a2c10dc000d5e50f314';
@@ -109,6 +110,21 @@ class _EventAdminHomePageState extends State<EventAdminHomePage> {
         child: Column(
           children: [
             _buildHeader(),
+            AdminPresenceCard(
+              adminId: widget.adminId,
+              adminName: widget.adminName,
+              role: 'eventAdmin',
+              level: 0,
+              department: '',
+              accent: _kEAAccent,
+              onSignedOut: () {
+                Navigator.of(context).popUntil((r) => r.isFirst);
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (_) => const LoginPage()),
+                );
+              },
+            ),
             Expanded(
               child: Container(
                 width: double.infinity,

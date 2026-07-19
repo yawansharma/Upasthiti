@@ -210,16 +210,68 @@ class _L2TeamTabState extends State<L2TeamTab> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final l3s =
-        await AdminHierarchyService.listL3UnderSupervisor(widget.adminId);
+    // Merge L3s explicitly assigned to this L2 (parentAdminId) with those
+    // derived from class supervision, deduped by username.
+    final results = await Future.wait([
+      AdminHierarchyService.listChildren(widget.adminId, level: 3),
+      AdminHierarchyService.listL3UnderSupervisor(widget.adminId),
+    ]);
+    final merged = <String, models.Document>{};
+    for (final d in [...results[0], ...results[1]]) {
+      final u = d.data['username'] as String? ?? d.$id;
+      merged[u] = d;
+    }
     final l1 = await AdminHierarchyService.resolveReportingL1(widget.adminId);
     if (mounted) {
       setState(() {
-        _l3Admins = l3s;
+        _l3Admins = merged.values.toList();
         _reportsToL1Id = l1.id;
         _reportsToL1Name = l1.name;
         _loading = false;
       });
+    }
+  }
+
+  Future<void> _setDeadline(models.Document doc) async {
+    final existing = (doc.data['presenceDeadline'] as String?) ?? '';
+    TimeOfDay initial = const TimeOfDay(hour: 9, minute: 0);
+    if (existing.contains(':')) {
+      final p = existing.split(':');
+      initial = TimeOfDay(
+          hour: int.tryParse(p[0]) ?? 9, minute: int.tryParse(p[1]) ?? 0);
+    }
+    final picked = await showTimePicker(context: context, initialTime: initial);
+    if (picked == null) return;
+    final hhmm =
+        '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
+    try {
+      await AdminHierarchyService.setPresenceDeadline(doc.$id, hhmm);
+      await _load();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Report-by time set to $hhmm.')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Failed: $e')));
+      }
+    }
+  }
+
+  Future<void> _clearDeadline(models.Document doc) async {
+    try {
+      await AdminHierarchyService.setPresenceDeadline(doc.$id, '');
+      await _load();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Time restriction removed.')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Failed: $e')));
+      }
     }
   }
 
@@ -320,8 +372,9 @@ class _L2TeamTabState extends State<L2TeamTab> {
     final data = doc.data;
     final name = AdminHierarchyService.displayName(doc);
     final username = data['username'] as String? ?? '';
-    final dept = data['department'] as String? ?? 'â€”';
+    final dept = data['department'] as String? ?? '—';
     final managed = (data['managedClasses'] as List?)?.length ?? 0;
+    final deadline = (data['presenceDeadline'] as String?) ?? '';
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -330,37 +383,87 @@ class _L2TeamTabState extends State<L2TeamTab> {
       color: Colors.white,
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            CircleAvatar(
-              backgroundColor: const Color(0xFF7A6A8A).withValues(alpha: 0.15),
-              child: Text(
-                name.isNotEmpty ? name[0].toUpperCase() : '?',
-                style: const TextStyle(
-                    color: Color(0xFF7A6A8A),
-                    fontWeight: FontWeight.bold),
-              ),
+            Row(
+              children: [
+                CircleAvatar(
+                  backgroundColor:
+                      const Color(0xFF7A6A8A).withValues(alpha: 0.15),
+                  child: Text(
+                    name.isNotEmpty ? name[0].toUpperCase() : '?',
+                    style: const TextStyle(
+                        color: Color(0xFF7A6A8A),
+                        fontWeight: FontWeight.bold),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(name,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 15)),
+                      Text('$username • $dept',
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.grey.shade600)),
+                      const SizedBox(height: 4),
+                      Text('$managed class(es) assigned',
+                          style: TextStyle(
+                              fontSize: 11, color: Colors.grey.shade500)),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.person_outline,
+                    color: Color(0xFF7A6A8A), size: 28),
+              ],
             ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(name,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 15)),
-                  Text('$username â€¢ $dept',
-                      style: TextStyle(
-                          fontSize: 12, color: Colors.grey.shade600)),
-                  const SizedBox(height: 4),
-                  Text('$managed class(es) assigned',
-                      style: TextStyle(
-                          fontSize: 11, color: Colors.grey.shade500)),
-                ],
-              ),
+            const Divider(height: 22),
+            // ── Optional presence "report-by" time constraint ──────────────
+            Row(
+              children: [
+                Icon(Icons.schedule_outlined,
+                    size: 16,
+                    color: deadline.isEmpty
+                        ? Colors.grey.shade500
+                        : const Color(0xFF4E7A8A)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    deadline.isEmpty
+                        ? 'No time limit — reports any time after 5:30 AM'
+                        : 'Report-by $deadline (late reports flagged)',
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: deadline.isEmpty
+                            ? Colors.grey.shade600
+                            : const Color(0xFF4E7A8A)),
+                  ),
+                ),
+                if (deadline.isNotEmpty)
+                  TextButton(
+                    onPressed: () => _clearDeadline(doc),
+                    style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        minimumSize: Size.zero),
+                    child: const Text('Remove',
+                        style:
+                            TextStyle(fontSize: 12, color: Colors.redAccent)),
+                  ),
+                TextButton(
+                  onPressed: () => _setDeadline(doc),
+                  style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFF4E7A8A),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: Size.zero),
+                  child: Text(deadline.isEmpty ? 'Apply' : 'Change',
+                      style: const TextStyle(fontSize: 12)),
+                ),
+              ],
             ),
-            const Icon(Icons.person_outline,
-                color: Color(0xFF7A6A8A), size: 28),
           ],
         ),
       ),

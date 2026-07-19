@@ -8,6 +8,7 @@ import 'app_theme.dart';
 import 'main.dart';
 import 'services/appwrite_service.dart';
 import 'components/user_avatar.dart';
+import 'components/admin_presence_card.dart';
 
 const Color _kSAAccent = Color(0xFF8A2A2A);
 final String _kDb = AppwriteService.databaseId;
@@ -39,6 +40,21 @@ class _SecurityAdminHomePageState extends State<SecurityAdminHomePage> {
         child: Column(
           children: [
             _buildHeader(context),
+            AdminPresenceCard(
+              adminId: widget.adminId,
+              adminName: widget.adminName,
+              role: 'securityAdmin',
+              level: 0,
+              department: '',
+              accent: _kSAAccent,
+              onSignedOut: () {
+                Navigator.of(context).popUntil((r) => r.isFirst);
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (_) => const LoginPage()),
+                );
+              },
+            ),
             Expanded(
               child: Container(
                 width: double.infinity,
