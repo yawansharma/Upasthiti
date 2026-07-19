@@ -1,12 +1,14 @@
-import 'dart:io';
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart' hide Permission;
 import 'package:appwrite/models.dart' as models;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:excel/excel.dart' hide Border, Center;
-import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:geolocator/geolocator.dart';
 import 'dean_login.dart';
 import 'admin_home_page.dart';
 import 'admin_hierarchy_views.dart';
@@ -14,6 +16,7 @@ import 'app_theme.dart';
 import 'services/appwrite_service.dart';
 import 'services/admin_hierarchy_service.dart';
 import 'services/leave_service.dart';
+import 'services/export_service.dart';
 import 'distribution/dean_distribution_tab.dart';
 import 'components/user_avatar.dart';
 
@@ -773,10 +776,6 @@ class _DeanReportsTabState extends State<_DeanReportsTab> {
   Future<void> _exportExcel() async {
     setState(() => _exporting = true);
     try {
-      if (!Platform.isWindows && !(await Permission.storage.request().isGranted)) {
-        await Permission.manageExternalStorage.request();
-      }
-
       final excel = Excel.createExcel();
 
       // ── Sheet 1: Admin Overview ────────────────────────────────────
@@ -875,23 +874,23 @@ class _DeanReportsTabState extends State<_DeanReportsTab> {
       // Remove the default blank sheet Excel creates
       excel.delete('Sheet1');
 
-      // Save file
+      // Save file — via the OS Save dialog, so it lands somewhere visible
+      // (Downloads by default), never buried in an app-private folder.
       final bytes = excel.encode();
       if (bytes == null) throw Exception('Failed to encode Excel file');
 
-      final dir = Platform.isWindows
-          ? Directory('${Platform.environment['USERPROFILE']}\\Downloads')
-          : await getExternalStorageDirectory();
-      if (dir == null) throw Exception('Could not find downloads directory');
-
       final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-      final path = '${dir.path}/dean_admin_report_$timestamp.xlsx';
-      await File(path).writeAsBytes(bytes);
+      final savedPath = await ExportService.saveBytes(
+        bytes: Uint8List.fromList(bytes),
+        fileName: 'dean_admin_report_$timestamp.xlsx',
+      );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Saved: dean_admin_report_$timestamp.xlsx'),
+            content: Text(savedPath != null
+                ? 'Saved: dean_admin_report_$timestamp.xlsx'
+                : 'Export cancelled.'),
             backgroundColor: kDeanDark,
             behavior: SnackBarBehavior.floating,
           ),
@@ -1283,6 +1282,7 @@ class _AdminListTabState extends State<_AdminListTab> {
     String selectedDept = departments.first;
     int selectedIdx = 0;
     models.Document? selectedParent;
+    Map<String, dynamic>? selectedBoundary;
     bool saving = false;
 
     showModalBottomSheet(
@@ -1524,6 +1524,55 @@ class _AdminListTabState extends State<_AdminListTab> {
                       ),
                   ],
 
+                  // Presence location — required for every admin type except
+                  // the Dean itself; no shared default, set individually.
+                  const SizedBox(height: 14),
+                  InkWell(
+                    onTap: () async {
+                      final picked =
+                          await _openDeanBoundaryPicker(selectedBoundary);
+                      if (picked != null) {
+                        setSheetState(() => selectedBoundary = picked);
+                      }
+                    },
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 16),
+                      decoration: BoxDecoration(
+                          border: Border.all(
+                              color: selectedBoundary != null
+                                  ? kDeanGold.withValues(alpha: 0.6)
+                                  : Colors.red.shade300),
+                          borderRadius: BorderRadius.circular(12)),
+                      child: Row(
+                        children: [
+                          Icon(Icons.my_location,
+                              size: 18,
+                              color: selectedBoundary != null
+                                  ? kDeanGold
+                                  : Colors.red.shade400),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              selectedBoundary != null
+                                  ? "Location set · ${(selectedBoundary!['radiusMeters'] as num).toStringAsFixed(0)} m radius"
+                                  : "Set this admin's presence location (required)",
+                              style: TextStyle(
+                                  fontSize: 14,
+                                  color: selectedBoundary != null
+                                      ? kDeanDark
+                                      : Colors.red.shade400,
+                                  fontWeight: selectedBoundary != null
+                                      ? FontWeight.w600
+                                      : FontWeight.normal),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
                   const SizedBox(height: 28),
                   SizedBox(
                     width: double.infinity,
@@ -1540,6 +1589,15 @@ class _AdminListTabState extends State<_AdminListTab> {
                                       const SnackBar(
                                           content: Text(
                                               'Please choose who this admin reports to.')));
+                                }
+                                return;
+                              }
+                              if (selectedBoundary == null) {
+                                if (ctx.mounted) {
+                                  ScaffoldMessenger.of(ctx).showSnackBar(
+                                      const SnackBar(
+                                          content: Text(
+                                              "Please set this admin's presence location before creating their ID.")));
                                 }
                                 return;
                               }
@@ -1592,6 +1650,8 @@ class _AdminListTabState extends State<_AdminListTab> {
                                       selectedParent!.data['name'] ??
                                           selectedParent!.data['username'];
                                 }
+                                docData['presenceBoundary'] =
+                                    jsonEncode(selectedBoundary);
 
                                 await AppwriteService.databases
                                     .createDocument(
@@ -1642,6 +1702,179 @@ class _AdminListTabState extends State<_AdminListTab> {
             ),
           );
         },
+      ),
+    );
+  }
+
+  /// Map picker for a new admin's individual presence geofence. Each admin
+  /// gets their own location — there is no shared/common default.
+  Future<Map<String, dynamic>?> _openDeanBoundaryPicker(
+      Map<String, dynamic>? existing) async {
+    LatLng pos;
+    if (existing != null) {
+      pos = LatLng((existing['lat'] as num).toDouble(),
+          (existing['lng'] as num).toDouble());
+    } else {
+      try {
+        final loc = await Geolocator.getCurrentPosition(
+            desiredAccuracy: LocationAccuracy.high);
+        pos = LatLng(loc.latitude, loc.longitude);
+      } catch (_) {
+        pos = const LatLng(20.59, 78.96);
+      }
+    }
+    double radius =
+        existing != null ? (existing['radiusMeters'] as num).toDouble() : 100.0;
+    LatLng current = pos;
+    final mapController = MapController();
+    if (!mounted) return null;
+
+    return showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        contentPadding: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        content: SizedBox(
+          height: 560,
+          width: 600,
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: const BoxDecoration(
+                  color: kDeanGold,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.my_location, color: kDeanDark, size: 22),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text("Set Admin's Presence Location",
+                          style: TextStyle(
+                              color: kDeanDark,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15)),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: kDeanDark),
+                      onPressed: () => Navigator.pop(dialogCtx),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: StatefulBuilder(builder: (_, setSt) {
+                  return Stack(
+                    children: [
+                      FlutterMap(
+                        mapController: mapController,
+                        options: MapOptions(
+                          initialCenter: pos,
+                          initialZoom: 16,
+                          onTap: (_, p) => setSt(() => current = p),
+                        ),
+                        children: [
+                          TileLayer(
+                            urlTemplate:
+                                'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            userAgentPackageName: 'com.virtualvision.admin',
+                          ),
+                          CircleLayer(circles: [
+                            CircleMarker(
+                              point: current,
+                              radius: radius,
+                              useRadiusInMeter: true,
+                              color: kDeanGold.withValues(alpha: 0.18),
+                              borderColor: kDeanGold,
+                              borderStrokeWidth: 2,
+                            ),
+                          ]),
+                          MarkerLayer(markers: [
+                            Marker(
+                              point: current,
+                              width: 40,
+                              height: 40,
+                              child: const Icon(Icons.location_on,
+                                  color: Colors.red, size: 40),
+                            ),
+                          ]),
+                        ],
+                      ),
+                      Positioned(
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        child: Container(
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            borderRadius:
+                                BorderRadius.vertical(top: Radius.circular(20)),
+                          ),
+                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(children: [
+                                const Icon(Icons.my_location,
+                                    size: 13, color: Colors.grey),
+                                const SizedBox(width: 6),
+                                Text(
+                                  "${current.latitude.toStringAsFixed(5)}, ${current.longitude.toStringAsFixed(5)}",
+                                  style: const TextStyle(
+                                      fontSize: 12, fontWeight: FontWeight.w600),
+                                ),
+                              ]),
+                              const SizedBox(height: 6),
+                              Row(children: [
+                                const Icon(Icons.radio_button_checked,
+                                    size: 13, color: kDeanGold),
+                                const SizedBox(width: 6),
+                                Text("Radius: ${radius.toStringAsFixed(0)} m",
+                                    style: const TextStyle(
+                                        fontSize: 12, fontWeight: FontWeight.w600)),
+                                Expanded(
+                                  child: Slider(
+                                    value: radius,
+                                    min: 30,
+                                    max: 500,
+                                    divisions: 47,
+                                    activeColor: kDeanGold,
+                                    onChanged: (v) => setSt(() => radius = v),
+                                  ),
+                                ),
+                              ]),
+                              const SizedBox(height: 6),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: kDeanGold,
+                                    foregroundColor: kDeanDark,
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10)),
+                                  ),
+                                  onPressed: () => Navigator.pop(dialogCtx, {
+                                    'lat': current.latitude,
+                                    'lng': current.longitude,
+                                    'radiusMeters': radius,
+                                  }),
+                                  child: const Text("Confirm Location",
+                                      style: TextStyle(fontWeight: FontWeight.bold)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                }),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1883,6 +2116,63 @@ class _AdminListTabState extends State<_AdminListTab> {
                 ),
               ),
               const SizedBox(height: 16),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.my_location, color: kDeanGold),
+                title: const Text("Set / Update Location",
+                    style: TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: Text(
+                    (data['presenceBoundary'] as String?)?.isNotEmpty == true
+                        ? "This admin's presence location is set."
+                        : "No presence location set yet — they can't report presence.",
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: (data['presenceBoundary'] as String?)
+                                    ?.isNotEmpty ==
+                                true
+                            ? Colors.grey.shade500
+                            : Colors.red.shade400)),
+                onTap: () async {
+                  Map<String, dynamic>? existing;
+                  final raw = data['presenceBoundary'];
+                  if (raw is String && raw.isNotEmpty) {
+                    try {
+                      final d = jsonDecode(raw);
+                      if (d is Map &&
+                          d['lat'] != null &&
+                          d['lng'] != null &&
+                          d['radiusMeters'] != null) {
+                        existing = {
+                          'lat': (d['lat'] as num).toDouble(),
+                          'lng': (d['lng'] as num).toDouble(),
+                          'radiusMeters': (d['radiusMeters'] as num).toDouble(),
+                        };
+                      }
+                    } catch (_) {}
+                  }
+                  final picked = await _openDeanBoundaryPicker(existing);
+                  if (picked == null) return;
+                  try {
+                    await AppwriteService.databases.updateDocument(
+                      databaseId: AppwriteService.databaseId,
+                      collectionId: 'users',
+                      documentId: doc.$id,
+                      data: {'presenceBoundary': jsonEncode(picked)},
+                    );
+                    if (!mounted) return;
+                    Navigator.pop(ctx);
+                    _fetchAdmins();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Location updated.')));
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                          SnackBar(content: Text('Failed: $e')));
+                    }
+                  }
+                },
+              ),
+              const Divider(),
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(

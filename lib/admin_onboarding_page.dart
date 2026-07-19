@@ -7,8 +7,9 @@ import 'services/appwrite_service.dart';
 import 'services/admin_presence_service.dart';
 
 /// First-login setup shown to every non-Dean admin exactly once. Captures a
-/// photo, registers the face with the ML backend, stores the profile picture,
-/// and pins the admin to the Office Admin's presence boundary. On completion it
+/// photo and registers the face with the ML backend. The admin's presence
+/// location is set individually by the Dean/Office Admin (normally at
+/// creation time) — this page just checks it's there. On completion it
 /// replaces itself with the admin's normal [destination] home page.
 class AdminOnboardingPage extends StatefulWidget {
   final String adminDocId; // users collection $id
@@ -95,8 +96,8 @@ class _AdminOnboardingPageState extends State<AdminOnboardingPage> {
         );
       }
 
-      // 3. Pin the Office Admin's boundary + mark onboarding complete.
-      progress.value = 'Setting up your work location…';
+      // 3. Mark onboarding complete (location is set per-admin separately).
+      progress.value = 'Finishing setup…';
       final boundary = await AdminPresenceService
           .pinBoundaryAndCompleteOnboarding(widget.adminDocId);
 
@@ -110,7 +111,7 @@ class _AdminOnboardingPageState extends State<AdminOnboardingPage> {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             title: const Text('Location not set up yet'),
             content: const Text(
-                'No campus boundary is set yet — your presence location will apply once the Office Admin configures it. You can still use the app normally.'),
+                'Your presence location hasn\'t been set yet. Ask your Dean or Office Admin to set it for your account before you can report presence. You can still use the app normally otherwise.'),
             actions: [
               ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: widget.accent),

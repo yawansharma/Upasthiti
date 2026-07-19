@@ -1,11 +1,8 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:csv/csv.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
 import 'package:appwrite/appwrite.dart' hide Permission;
@@ -15,6 +12,7 @@ import 'community_page.dart';
 import 'app_theme.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'services/appwrite_service.dart';
+import 'services/export_service.dart';
 import 'leave_management_page.dart';
 import 'distribution/admin_distribution_tab.dart';
 import 'services/admin_hierarchy_service.dart';
@@ -1880,11 +1878,6 @@ class _AdminHomePageState extends State<AdminHomePage> {
   }
 
   Future<void> _exportLogsToCSV() async {
-    if (!Platform.isWindows &&
-        !(await Permission.storage.request().isGranted)) {
-      await Permission.manageExternalStorage.request();
-    }
-
     // Fetch all non-hidden logs for this admin
     final logsSnapshot = await AppwriteService.databases.listDocuments(
       databaseId: AppwriteService.databaseId,
@@ -1916,17 +1909,14 @@ class _AdminHomePageState extends State<AdminHomePage> {
     }
 
     final String csvData = const ListToCsvConverter().convert(rows);
-    final Directory? dir = Platform.isWindows
-        ? Directory(
-            '${Platform.environment['USERPROFILE']}\\Downloads')
-        : await getExternalStorageDirectory();
-    if (dir == null) return;
-    final path =
-        "${dir.path}/attendance_${DateTime.now().millisecondsSinceEpoch}.csv";
-    await File(path).writeAsString(csvData);
+    final savedPath = await ExportService.saveText(
+      content: csvData,
+      fileName: "attendance_${DateTime.now().millisecondsSinceEpoch}.csv",
+    );
     if (mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text("Saved to $path")));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+              savedPath != null ? "Saved to $savedPath" : "Export cancelled.")));
     }
   }
 
@@ -2722,10 +2712,6 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
   }
 
   Future<void> _exportClassCSV() async {
-    if (!Platform.isWindows &&
-        !(await Permission.storage.request().isGranted)) {
-      await Permission.manageExternalStorage.request();
-    }
     final logsSnapshot = await AppwriteService.databases.listDocuments(
       databaseId: AppwriteService.databaseId,
       collectionId: 'attendance_logs',
@@ -2753,17 +2739,14 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
       ]);
     }
     final String csvData = const ListToCsvConverter().convert(rows);
-    final Directory? dir = Platform.isWindows
-        ? Directory(
-            '${Platform.environment['USERPROFILE']}\\Downloads')
-        : await getExternalStorageDirectory();
-    if (dir == null) return;
-    final path =
-        "${dir.path}/${_className}_${DateTime.now().millisecondsSinceEpoch}.csv";
-    await File(path).writeAsString(csvData);
+    final savedPath = await ExportService.saveText(
+      content: csvData,
+      fileName: "${_className}_${DateTime.now().millisecondsSinceEpoch}.csv",
+    );
     if (mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text("Saved to $path")));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+              savedPath != null ? "Saved to $savedPath" : "Export cancelled.")));
     }
   }
 

@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:appwrite/appwrite.dart';
@@ -8,7 +8,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:csv/csv.dart';
 import 'package:excel/excel.dart' hide Border, Center;
-import 'package:path_provider/path_provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:pdf/pdf.dart';
@@ -21,6 +20,7 @@ import 'package:geolocator/geolocator.dart';
 import 'app_theme.dart';
 import 'services/appwrite_service.dart';
 import 'services/admin_presence_service.dart';
+import 'services/export_service.dart';
 import 'components/user_avatar.dart';
 import 'components/admin_presence_card.dart';
 import 'office_admin_student_attendance_page.dart';
@@ -888,16 +888,16 @@ class _ReportsTabState extends State<_ReportsTab> {
         return;
       }
 
-      final dir = await getApplicationDocumentsDirectory();
       final ts = DateTime.now().millisecondsSinceEpoch;
-      String savedPath = '';
+      String? savedPath;
 
       if (format == 'csv') {
         const conv = ListToCsvConverter();
         final csv = conv.convert([columns, ...rows]);
-        final file = File('${dir.path}/attendance_$ts.csv');
-        await file.writeAsString(csv);
-        savedPath = file.path;
+        savedPath = await ExportService.saveText(
+          content: csv,
+          fileName: 'attendance_$ts.csv',
+        );
       } else if (format == 'excel') {
         final excel = Excel.createExcel();
         final sheet = excel['Attendance'];
@@ -919,9 +919,10 @@ class _ReportsTabState extends State<_ReportsTab> {
           }
         }
         final bytes = excel.save()!;
-        final file = File('${dir.path}/attendance_$ts.xlsx');
-        await file.writeAsBytes(bytes);
-        savedPath = file.path;
+        savedPath = await ExportService.saveBytes(
+          bytes: Uint8List.fromList(bytes),
+          fileName: 'attendance_$ts.xlsx',
+        );
       } else if (format == 'pdf') {
         final pdf = pw.Document();
         pdf.addPage(
@@ -948,9 +949,10 @@ class _ReportsTabState extends State<_ReportsTab> {
             },
           ),
         );
-        final file = File('${dir.path}/attendance_$ts.pdf');
-        await file.writeAsBytes(await pdf.save());
-        savedPath = file.path;
+        savedPath = await ExportService.saveBytes(
+          bytes: await pdf.save(),
+          fileName: 'attendance_$ts.pdf',
+        );
       }
 
       if (mounted) {
@@ -2077,7 +2079,6 @@ class _AdminsTab extends StatefulWidget {
 class _AdminsTabState extends State<_AdminsTab> {
   List<models.Document> _admins = [];
   bool _loading = true;
-  Map<String, dynamic>? _boundary;
 
   List<models.Document> get _l1s =>
       _admins.where((d) => d.data['level'] == 1 && d.data['status'] != 'disabled').toList();
@@ -2100,11 +2101,9 @@ class _AdminsTabState extends State<_AdminsTab> {
           Query.limit(500),
         ],
       );
-      final boundary = await AdminPresenceService.getBoundaryConfig();
       if (mounted) {
         setState(() {
           _admins = result.documents;
-          _boundary = boundary;
           _loading = false;
         });
       }
@@ -2135,6 +2134,7 @@ class _AdminsTabState extends State<_AdminsTab> {
     String selectedDept = _kDepartments.first;
     int selectedIdx = 0;
     models.Document? selectedParent;
+    Map<String, dynamic>? selectedBoundary;
     bool saving = false;
 
     showModalBottomSheet(
@@ -2304,6 +2304,53 @@ class _AdminsTabState extends State<_AdminsTab> {
                               fontSize: 12, color: Colors.grey.shade500)),
                     ),
 
+                  const SizedBox(height: 14),
+                  InkWell(
+                    onTap: () async {
+                      final picked =
+                          await _openBoundaryPicker(selectedBoundary);
+                      if (picked != null) {
+                        setSheetState(() => selectedBoundary = picked);
+                      }
+                    },
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 16),
+                      decoration: BoxDecoration(
+                          border: Border.all(
+                              color: selectedBoundary != null
+                                  ? _kOAAccent.withValues(alpha: 0.5)
+                                  : Colors.red.shade300),
+                          borderRadius: BorderRadius.circular(12)),
+                      child: Row(
+                        children: [
+                          Icon(Icons.my_location,
+                              size: 18,
+                              color: selectedBoundary != null
+                                  ? _kOAAccent
+                                  : Colors.red.shade400),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              selectedBoundary != null
+                                  ? "Location set · ${(selectedBoundary!['radiusMeters'] as num).toStringAsFixed(0)} m radius"
+                                  : "Set this admin's presence location (required)",
+                              style: TextStyle(
+                                  fontSize: 14,
+                                  color: selectedBoundary != null
+                                      ? _kOAAccent
+                                      : Colors.red.shade400,
+                                  fontWeight: selectedBoundary != null
+                                      ? FontWeight.w600
+                                      : FontWeight.normal),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
                   const SizedBox(height: 22),
                   SizedBox(
                     width: double.infinity,
@@ -2319,6 +2366,11 @@ class _AdminsTabState extends State<_AdminsTab> {
                               }
                               if (needsParent && selectedParent == null) {
                                 _snack('Please choose who this admin reports to.');
+                                return;
+                              }
+                              if (selectedBoundary == null) {
+                                _snack(
+                                    "Please set this admin's presence location before creating their ID.");
                                 return;
                               }
                               setSheetState(() => saving = true);
@@ -2359,6 +2411,8 @@ class _AdminsTabState extends State<_AdminsTab> {
                                       selectedParent!.data['name'] ??
                                           selectedParent!.data['username'];
                                 }
+                                docData['presenceBoundary'] =
+                                    jsonEncode(selectedBoundary);
 
                                 await AppwriteService.databases.createDocument(
                                   databaseId: _kDb,
@@ -2469,24 +2523,6 @@ class _AdminsTabState extends State<_AdminsTab> {
       _snack('Reporting line updated.');
     } catch (e) {
       _snack('Failed: $e');
-    }
-  }
-
-  // ── Presence boundary picker (map) ─────────────────────────────────────
-  Future<void> _setBoundary() async {
-    final picked = await _openBoundaryPicker(_boundary);
-    if (picked == null) return;
-    try {
-      await AdminPresenceService.setBoundaryConfig(
-        lat: picked['lat'],
-        lng: picked['lng'],
-        radiusMeters: picked['radiusMeters'],
-        updatedBy: widget.adminId,
-      );
-      if (mounted) setState(() => _boundary = picked);
-      _snack('Presence boundary saved.');
-    } catch (e) {
-      _snack('Failed to save boundary: $e');
     }
   }
 
@@ -2757,16 +2793,16 @@ class _AdminsTabState extends State<_AdminsTab> {
       final bytes = excel.encode();
       if (bytes == null) throw Exception('Failed to encode Excel');
 
-      final dir = Platform.isWindows
-          ? Directory('${Platform.environment['USERPROFILE']}\\Downloads')
-          : (await getExternalStorageDirectory() ??
-              await getApplicationDocumentsDirectory());
       final ts = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-      final path = '${dir.path}/admin_activity_$ts.xlsx';
-      await File(path).writeAsBytes(bytes);
+      final savedPath = await ExportService.saveBytes(
+        bytes: Uint8List.fromList(bytes),
+        fileName: 'admin_activity_$ts.xlsx',
+      );
 
       if (mounted) Navigator.pop(context);
-      _snack('Saved: admin_activity_$ts.xlsx');
+      _snack(savedPath != null
+          ? 'Saved: admin_activity_$ts.xlsx'
+          : 'Export cancelled.');
     } catch (e) {
       if (mounted) Navigator.pop(context);
       _snack('Export failed: $e');
@@ -2806,11 +2842,6 @@ class _AdminsTabState extends State<_AdminsTab> {
                               color: Colors.black87)),
                     ),
                     IconButton(
-                      onPressed: _setBoundary,
-                      tooltip: 'Set presence boundary',
-                      icon: const Icon(Icons.map_outlined, color: _kOAAccent),
-                    ),
-                    IconButton(
                       onPressed: _exportActivity,
                       tooltip: 'Export admin activity',
                       icon: const Icon(Icons.download_rounded, color: _kOAAccent),
@@ -2818,14 +2849,8 @@ class _AdminsTabState extends State<_AdminsTab> {
                   ],
                 ),
                 Text(
-                  _boundary == null
-                      ? 'No presence boundary set yet — tap the map icon to set one.'
-                      : 'Boundary: ${(_boundary!['radiusMeters'] as num).toStringAsFixed(0)} m radius set.',
-                  style: TextStyle(
-                      fontSize: 12,
-                      color: _boundary == null
-                          ? Colors.orange.shade700
-                          : Colors.black45),
+                  'Each admin has their own presence location — set via ⋮ on their card, or when onboarding a new one.',
+                  style: TextStyle(fontSize: 12, color: Colors.black45),
                 ),
               ],
             ),
