@@ -8,13 +8,18 @@ import 'services/admin_hierarchy_service.dart';
 class LeaveRequestPage extends StatefulWidget {
   final String userId;
   final String userName;
-  final int userLevel;
+  final int? userLevel;
+
+  /// True for a student submitting their own leave — routes to an HR Admin
+  /// instead of walking the admin hierarchy (students have no `userLevel`).
+  final bool isStudent;
 
   const LeaveRequestPage({
     super.key,
     required this.userId,
     required this.userName,
-    required this.userLevel,
+    this.userLevel,
+    this.isStudent = false,
   });
 
   @override
@@ -45,19 +50,25 @@ class _LeaveRequestPageState extends State<LeaveRequestPage> {
 
     setState(() => _loading = true);
     try {
-      // Logic: Request goes to person at Level X - 1 (lower number = higher rank)
-      final approvers = await AdminHierarchyService.resolveApprovers(
-        requesterId: widget.userId,
-        requesterLevel: widget.userLevel,
-      );
+      // Students route to an HR Admin; admins walk the L1/L2/L3 chain
+      // (request goes to person at Level X - 1, lower number = higher rank).
+      final approvers = widget.isStudent
+          ? await AdminHierarchyService.resolveStudentApprovers(widget.userId)
+          : await AdminHierarchyService.resolveApprovers(
+              requesterId: widget.userId,
+              requesterLevel: widget.userLevel!,
+            );
       if (approvers.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
+            SnackBar(
               content: Text(
-                "No approver could be found for your account yet "
-                "(you may not be assigned to a supervisor). Contact your "
-                "institution admin before submitting leave.",
+                widget.isStudent
+                    ? "No HR Admin is available to review leave requests "
+                        "right now. Please contact your institution."
+                    : "No approver could be found for your account yet "
+                        "(you may not be assigned to a supervisor). Contact your "
+                        "institution admin before submitting leave.",
               ),
             ),
           );
@@ -73,7 +84,9 @@ class _LeaveRequestPageState extends State<LeaveRequestPage> {
         startDate: _startDate,
         endDate: _endDate,
         reason: _reasonCtrl.text.trim(),
-        approverLevel: widget.userLevel - 1,
+        // -1 is a dedicated sentinel for student→HR requests; never
+        // collides with the admin chain's real approverLevel values (0-2).
+        approverLevel: widget.isStudent ? -1 : widget.userLevel! - 1,
         approverId: approvers.first,
       );
 

@@ -295,6 +295,9 @@ class _RegisterPageState extends State<RegisterPage> {
 }
 
   Future<void> _onRegisterPressed() async {
+    if (nameController.text.trim().isEmpty) { _showSnackBar("Please enter your name."); return; }
+    if (uniqueCodeController.text.trim().isEmpty) { _showSnackBar("Please enter a unique ID."); return; }
+    if (passwordController.text.trim().length < 6) { _showSnackBar("Password must be at least 6 characters."); return; }
     if (_localPhoto == null) { _showSnackBar("Please add a photo first."); return; }
     if (latitude == null || longitude == null) { _showSnackBar("Please fetch your location first."); return; }
     if (passwordController.text != confirmPasswordController.text) { _showSnackBar("Passwords do not match."); return; }
@@ -330,6 +333,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
       // Upload profile picture to Appwrite Storage Bucket
       String? picId;
+      bool photoUploadFailed = false;
       try {
         final bytes = await _localPhoto!.readAsBytes();
         final extension = _localPhoto!.path.split('.').last.toLowerCase();
@@ -345,6 +349,7 @@ class _RegisterPageState extends State<RegisterPage> {
         picId = uploadedFile.$id;
       } catch (e) {
         debugPrint("Image upload to storage failed: $e");
+        photoUploadFailed = true;
       }
 
       await _registerUserInAppwrite(picId);
@@ -380,6 +385,14 @@ class _RegisterPageState extends State<RegisterPage> {
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
               ),
+              if (photoUploadFailed) ...[
+                const SizedBox(height: 12),
+                Text(
+                  "Note: your profile photo failed to upload. Ask an admin to re-enroll it later.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.orange.shade700, fontSize: 12),
+                ),
+              ],
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,

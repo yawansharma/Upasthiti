@@ -1282,6 +1282,7 @@ class _AdminListTabState extends State<_AdminListTab> {
     final passCtrl = TextEditingController();
     String selectedDept = departments.first;
     int selectedIdx = 0;
+    models.Document? selectedParent;
     bool saving = false;
 
     showModalBottomSheet(
@@ -1293,6 +1294,26 @@ class _AdminListTabState extends State<_AdminListTab> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheetState) {
           final color = roleColors[selectedIdx];
+          // Institution Admins (idx 0) report to the Dean directly. Dept.
+          // Heads (idx 1) need an L1 parent; Team Leaders (idx 2) need an L2
+          // parent — mirrors the Office Admin's onboarding sheet exactly.
+          final needsParent = selectedIdx == 1 || selectedIdx == 2;
+          final parentOptions = selectedIdx == 1
+              ? _admins
+                  .where((d) =>
+                      d.data['level'] == 1 && d.data['status'] != 'disabled')
+                  .toList()
+              : selectedIdx == 2
+                  ? _admins
+                      .where((d) =>
+                          d.data['level'] == 2 &&
+                          d.data['status'] != 'disabled')
+                      .toList()
+                  : <models.Document>[];
+          if (selectedParent != null &&
+              !parentOptions.any((p) => p.$id == selectedParent!.$id)) {
+            selectedParent = null;
+          }
           return Padding(
             padding: EdgeInsets.only(
                 bottom: MediaQuery.of(ctx).viewInsets.bottom,
@@ -1466,6 +1487,43 @@ class _AdminListTabState extends State<_AdminListTab> {
                     ),
                   ],
 
+                  // Parent picker — mirrors Office Admin's onboarding flow.
+                  if (needsParent) ...[
+                    const SizedBox(height: 14),
+                    DropdownButtonFormField<models.Document>(
+                      isExpanded: true,
+                      value: selectedParent,
+                      decoration: InputDecoration(
+                          labelText: selectedIdx == 1
+                              ? 'Reports to (Institution Admin)'
+                              : 'Reports to (Dept. Head)',
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12))),
+                      items: parentOptions
+                          .map((p) => DropdownMenuItem(
+                                value: p,
+                                child: Text(
+                                  "${p.data['name'] ?? p.data['username']} · ${p.data['department'] ?? ''}",
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ))
+                          .toList(),
+                      onChanged: (v) =>
+                          setSheetState(() => selectedParent = v),
+                    ),
+                    if (parentOptions.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          selectedIdx == 1
+                              ? 'No Institution Admins exist yet. Create one first.'
+                              : 'No Dept. Heads exist yet. Create one first.',
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.orange.shade700),
+                        ),
+                      ),
+                  ],
+
                   const SizedBox(height: 28),
                   SizedBox(
                     width: double.infinity,
@@ -1476,6 +1534,15 @@ class _AdminListTabState extends State<_AdminListTab> {
                           : () async {
                               if (usernameCtrl.text.trim().isEmpty ||
                                   passCtrl.text.trim().isEmpty) return;
+                              if (needsParent && selectedParent == null) {
+                                if (ctx.mounted) {
+                                  ScaffoldMessenger.of(ctx).showSnackBar(
+                                      const SnackBar(
+                                          content: Text(
+                                              'Please choose who this admin reports to.')));
+                                }
+                                return;
+                              }
                               setSheetState(() => saving = true);
 
                               try {
@@ -1517,6 +1584,13 @@ class _AdminListTabState extends State<_AdminListTab> {
                                 }
                                 if (roleNeedsDept[selectedIdx]) {
                                   docData['department'] = selectedDept;
+                                }
+                                if (needsParent && selectedParent != null) {
+                                  docData['parentAdminId'] =
+                                      selectedParent!.data['username'];
+                                  docData['parentAdminName'] =
+                                      selectedParent!.data['name'] ??
+                                          selectedParent!.data['username'];
                                 }
 
                                 await AppwriteService.databases

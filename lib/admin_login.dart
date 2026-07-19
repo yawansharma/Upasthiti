@@ -318,7 +318,7 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
         );
       } else {
         // RBAC Security Check
-        if (role != 'admin' && role != 'dean') {
+        if (role != 'admin') {
           _dismissAndShowError("Unauthorized access. This portal is for Administrators only.");
           _generateCaptcha();
           return;

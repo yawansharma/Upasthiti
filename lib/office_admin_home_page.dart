@@ -1465,15 +1465,22 @@ class _BiometricsTabState extends State<_BiometricsTab> {
     );
 
     try {
-      // 1. Register face on backend
-      try {
-        final req = http.MultipartRequest(
-            'POST', Uri.parse('$_kFaceBase/register-face'));
-        req.fields['username'] = username;
-        req.files.add(http.MultipartFile.fromBytes('image', bytes,
-            filename: 'photo.jpg'));
-        await req.send();
-      } catch (_) {}
+      // 1. Register face on backend — abort if it doesn't actually succeed,
+      // so we never claim "updated" while the face model is stale.
+      final req = http.MultipartRequest(
+          'POST', Uri.parse('$_kFaceBase/register-face'));
+      req.fields['username'] = username;
+      req.files.add(http.MultipartFile.fromBytes('image', bytes,
+          filename: 'photo.jpg'));
+      final streamed = await req.send().timeout(const Duration(seconds: 60));
+      if (streamed.statusCode != 200) {
+        final body = await streamed.stream.bytesToString();
+        if (mounted) {
+          Navigator.of(context).pop();
+          _snack("Face registration failed (status ${streamed.statusCode}): $body");
+        }
+        return;
+      }
 
       // 2. Delete old file from storage
       final oldFileId = doc.data['profilePictureId'] as String?;
@@ -2927,9 +2934,63 @@ class _AdminsTabState extends State<_AdminsTab> {
                     minimumSize: Size.zero),
                 child: const Text('Edit', style: TextStyle(fontSize: 12)),
               ),
+            TextButton(
+              onPressed: () => _toggleStatus(doc),
+              style: TextButton.styleFrom(
+                  foregroundColor: isDisabled ? Colors.green : Colors.red,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: Size.zero),
+              child: Text(isDisabled ? 'Enable' : 'Disable',
+                  style: const TextStyle(fontSize: 12)),
+            ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _toggleStatus(models.Document doc) async {
+    final data = doc.data;
+    final currentStatus = data['status'] as String? ?? 'active';
+    final newStatus = currentStatus == 'disabled' ? 'active' : 'disabled';
+    final name = data['name'] as String? ?? 'this admin';
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(newStatus == 'disabled' ? "Disable Admin" : "Enable Admin"),
+        content: Text(newStatus == 'disabled'
+            ? "Disable $name's account? They will not be able to log in."
+            : "Re-enable $name's account?"),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dctx, false),
+              child: const Text("Cancel")),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor:
+                  newStatus == 'disabled' ? Colors.red : Colors.green,
+            ),
+            onPressed: () => Navigator.pop(dctx, true),
+            child: Text(newStatus == 'disabled' ? "Disable" : "Enable",
+                style: const TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    try {
+      await AppwriteService.databases.updateDocument(
+        databaseId: _kDb,
+        collectionId: 'users',
+        documentId: doc.$id,
+        data: {'status': newStatus},
+      );
+      _fetch();
+      _snack(newStatus == 'disabled' ? 'Admin disabled.' : 'Admin enabled.');
+    } catch (e) {
+      _snack('Failed: $e');
+    }
   }
 }

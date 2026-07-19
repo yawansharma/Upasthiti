@@ -33,7 +33,6 @@ class AdminOnboardingPage extends StatefulWidget {
 class _AdminOnboardingPageState extends State<AdminOnboardingPage> {
   File? _photo;
   bool _busy = false;
-  String? _boundaryNote;
 
   void _snack(String msg) {
     if (!mounted) return;
@@ -100,13 +99,30 @@ class _AdminOnboardingPageState extends State<AdminOnboardingPage> {
       progress.value = 'Setting up your work location…';
       final boundary = await AdminPresenceService
           .pinBoundaryAndCompleteOnboarding(widget.adminDocId);
-      if (boundary == null) {
-        _boundaryNote =
-            'No campus boundary is set yet — your presence location will apply once the Office Admin configures it.';
-      }
 
       if (!mounted) return;
       if (Navigator.canPop(context)) Navigator.of(context).pop(); // progress
+
+      if (boundary == null) {
+        await showDialog<void>(
+          context: context,
+          builder: (dctx) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Text('Location not set up yet'),
+            content: const Text(
+                'No campus boundary is set yet — your presence location will apply once the Office Admin configures it. You can still use the app normally.'),
+            actions: [
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: widget.accent),
+                onPressed: () => Navigator.pop(dctx),
+                child: const Text('Continue', style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          ),
+        );
+      }
+
+      if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => widget.destination),
       );
@@ -209,12 +225,6 @@ class _AdminOnboardingPageState extends State<AdminOnboardingPage> {
                               fontWeight: FontWeight.bold, fontSize: 15)),
                 ),
               ),
-              if (_boundaryNote != null) ...[
-                const SizedBox(height: 16),
-                Text(_boundaryNote!,
-                    style: TextStyle(
-                        color: Colors.orange.shade200, fontSize: 12)),
-              ],
             ],
           ),
         ),

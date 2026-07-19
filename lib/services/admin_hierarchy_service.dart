@@ -510,6 +510,43 @@ class AdminHierarchyService {
   /// [requesterId] at [requesterLevel]. Level 3 approvers are the
   /// supervisor(s) of the requester's own classes; Level 2's approver is
   /// whichever L1 they report to; Level 1 routes to the Dean.
+  /// Active HR Admin usernames, preferring ones in [department] but falling
+  /// back to any HR Admin so a student never hits a dead end just because
+  /// their department has no dedicated HR Admin.
+  static Future<List<String>> _resolveHrApprovers(String? department) async {
+    final result = await AppwriteService.databases.listDocuments(
+      databaseId: databaseId,
+      collectionId: usersCollection,
+      queries: [Query.equal('role', 'hrAdmin'), Query.limit(100)],
+    );
+    final active = result.documents
+        .where((d) => d.data['status'] != 'disabled')
+        .toList();
+    if (department != null && department.isNotEmpty) {
+      final scoped = active
+          .where((d) => d.data['department'] == department)
+          .map((d) => d.data['username'] as String? ?? '')
+          .where((u) => u.isNotEmpty)
+          .toList();
+      if (scoped.isNotEmpty) return scoped;
+    }
+    return active
+        .map((d) => d.data['username'] as String? ?? '')
+        .where((u) => u.isNotEmpty)
+        .toList();
+  }
+
+  /// Approver(s) for a student's leave request — routed to HR Admin(s),
+  /// preferring one in the student's own department. Students have no
+  /// `level`, so this is called separately from the admin-hierarchy chain
+  /// in [resolveApprovers].
+  static Future<List<String>> resolveStudentApprovers(
+    String studentId,
+  ) async {
+    final student = await findUserByUsername(studentId);
+    return _resolveHrApprovers(student?.data['department'] as String?);
+  }
+
   static Future<List<String>> resolveApprovers({
     required String requesterId,
     required int requesterLevel,

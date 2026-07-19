@@ -78,7 +78,8 @@ class _HrAdminHomePageState extends State<HrAdminHomePage> {
                           children: [
                             _HRDashboardTab(
                                 adminId: widget.adminId,
-                                adminDepartment: widget.adminDepartment),
+                                adminDepartment: widget.adminDepartment,
+                                onNavigate: (i) => setState(() => _tabIndex = i)),
                             _HRApprovalsTab(
                                 adminId: widget.adminId,
                                 adminDepartment: widget.adminDepartment),
@@ -262,9 +263,12 @@ class _HrAdminHomePageState extends State<HrAdminHomePage> {
 class _HRDashboardTab extends StatefulWidget {
   final String adminId;
   final String adminDepartment;
+  final ValueChanged<int> onNavigate;
 
   const _HRDashboardTab(
-      {required this.adminId, required this.adminDepartment});
+      {required this.adminId,
+      required this.adminDepartment,
+      required this.onNavigate});
 
   @override
   State<_HRDashboardTab> createState() => _HRDashboardTabState();
@@ -384,6 +388,7 @@ class _HRDashboardTabState extends State<_HRDashboardTab> {
             "Review Leave Requests",
             "Approve or reject pending leave requests",
             Colors.orange.shade600,
+            onTap: () => widget.onNavigate(2),
           ),
           const SizedBox(height: 10),
           _actionCard(
@@ -391,6 +396,7 @@ class _HRDashboardTabState extends State<_HRDashboardTab> {
             "Student Registrations",
             "Approve new student registration requests",
             Colors.blue.shade600,
+            onTap: () => widget.onNavigate(1),
           ),
         ],
       ),
@@ -467,8 +473,12 @@ class _HRDashboardTabState extends State<_HRDashboardTab> {
   }
 
   Widget _actionCard(
-      IconData icon, String title, String subtitle, Color color) {
-    return Container(
+      IconData icon, String title, String subtitle, Color color,
+      {required VoidCallback onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -505,6 +515,7 @@ class _HRDashboardTabState extends State<_HRDashboardTab> {
           Icon(Icons.arrow_forward_ios_rounded,
               size: 14, color: Colors.grey.shade400),
         ],
+      ),
       ),
     );
   }
@@ -852,8 +863,10 @@ class _HRLeaveTabState extends State<_HRLeaveTab> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content:
+                Text(e.toString().replaceFirst('Exception: ', ''))));
+        _fetchLeaves();
       }
     }
   }
@@ -933,6 +946,13 @@ class _HRLeaveTabState extends State<_HRLeaveTab> {
     final userName = d['userName'] as String? ?? d['userId'] as String? ?? '—';
     final reason = d['reason'] as String? ?? '';
     final isPending = status == 'pending';
+    // Mirror LeaveService.updateStatus's own authorization rule: only an
+    // unassigned request or one explicitly routed to this HR admin can
+    // actually be actioned here. Everything else is view-only.
+    final approverId = d['approverId'] as String?;
+    final canAct = approverId == null ||
+        approverId.isEmpty ||
+        approverId == widget.adminId;
 
     String dateRange = '—';
     try {
@@ -1026,7 +1046,22 @@ class _HRLeaveTabState extends State<_HRLeaveTab> {
               overflow: TextOverflow.ellipsis,
             ),
           ],
-          if (isPending) ...[
+          if (isPending && !canAct) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Icon(Icons.info_outline, size: 13, color: Colors.grey.shade500),
+                const SizedBox(width: 5),
+                Expanded(
+                  child: Text(
+                    "Routed to another approver — view only.",
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (isPending && canAct) ...[
             const SizedBox(height: 12),
             Row(
               children: [

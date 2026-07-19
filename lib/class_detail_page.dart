@@ -213,16 +213,20 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
       _showProgressDialog(statusNotifier);
 
       bool isWithinGeofence = false;
+      bool geofenceCheckErrored = false;
       try {
         isWithinGeofence = await _checkGeofence();
       } catch (_) {
         isWithinGeofence = false;
+        geofenceCheckErrored = true;
       }
 
       if (_hasBoundary && !isWithinGeofence) {
         if (mounted) Navigator.of(context).pop();
         _showSnackBar(
-          "You are outside the class boundary. Move closer and try again.",
+          geofenceCheckErrored
+              ? "Couldn't verify your location. Check GPS/location permissions and try again."
+              : "You are outside the class boundary. Move closer and try again.",
         );
         setState(() => _isReporting = false);
         return;
@@ -308,6 +312,10 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
       if (mounted) {
         Navigator.of(context).pop();
         setState(() {}); // Refresh the FutureBuilders
+        if (photoUrl == null) {
+          _showSnackBar(
+              "Attendance saved, but your photo failed to upload — contact your admin if this repeats.");
+        }
         _showSuccessTicket(isWithinGeofence, entryStatus, activePeriod);
       }
     } catch (e) {

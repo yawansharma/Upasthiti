@@ -18,6 +18,7 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> {
   final _usernameController = TextEditingController();
   final _newPasswordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   final _securityAnswerController = TextEditingController();
   String? _selectedSecurityQuestion;
   final List<String> _securityQuestions = [
@@ -117,12 +118,33 @@ class _ProfilePageState extends State<ProfilePage> {
 
     try {
       Map<String, dynamic> updateData = {};
-      
+
       if (_newPasswordController.text.isNotEmpty) {
+        if (_newPasswordController.text.trim().length < 6) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text("Password must be at least 6 characters.")));
+          setState(() => _isLoading = false);
+          return;
+        }
+        if (_newPasswordController.text != _confirmPasswordController.text) {
+          ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Passwords do not match.")));
+          setState(() => _isLoading = false);
+          return;
+        }
         updateData['password'] = AppwriteService.hashPassword(_newPasswordController.text.trim());
       }
-      
-      if (_selectedSecurityQuestion != null && _securityAnswerController.text.trim().isNotEmpty) {
+
+      final questionChanged = _selectedSecurityQuestion != null;
+      final answerChanged = _securityAnswerController.text.trim().isNotEmpty;
+      if (questionChanged != answerChanged) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text(
+                "Please provide both a security question and an answer, or leave both blank.")));
+        setState(() => _isLoading = false);
+        return;
+      }
+      if (questionChanged && answerChanged) {
         updateData['securityQuestion'] = _selectedSecurityQuestion;
         updateData['securityAnswer'] = _securityAnswerController.text.trim();
       }
@@ -206,6 +228,12 @@ class _ProfilePageState extends State<ProfilePage> {
                       controller: _newPasswordController,
                       obscureText: true,
                       decoration: AppTheme.inputDecoration("New Password (Optional)", Icons.lock_outline),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _confirmPasswordController,
+                      obscureText: true,
+                      decoration: AppTheme.inputDecoration("Confirm New Password", Icons.lock_outline),
                     ),
                     const SizedBox(height: 32),
                     Text(
