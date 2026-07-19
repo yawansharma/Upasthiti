@@ -106,17 +106,23 @@ class _AdminPresenceCardState extends State<AdminPresenceCard> {
     _showProgress(progress);
 
     try {
-      // 1. Geofence
+      // 1. Geofence — a location MUST be set before presence can be reported.
       final boundary = await AdminPresenceService.boundaryForAdmin(widget.adminId);
+      if (boundary == null) {
+        _closeProgress();
+        _snack('Your presence location has not been set yet. Ask the office admin to set your location.');
+        setState(() => _busy = false);
+        return;
+      }
       bool inside = false;
       try {
         inside = await AdminPresenceService.isInsideBoundary(boundary);
       } catch (_) {
         inside = false;
       }
-      if (boundary != null && !inside) {
+      if (!inside) {
         _closeProgress();
-        _snack('You are outside the campus boundary. Move closer and try again.');
+        _snack('You are outside your assigned location. Move closer and try again.');
         setState(() => _busy = false);
         return;
       }

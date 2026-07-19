@@ -132,17 +132,51 @@ class AdminPresenceService {
     return getBoundaryConfig();
   }
 
-  /// Copies the current config boundary onto [adminDocId] as their pinned
-  /// `presenceBoundary` and marks onboarding complete. Returns the boundary
-  /// pinned (may be null if the Office Admin has not set one yet).
+  /// Sets a specific admin's own presence geofence, overriding the global
+  /// config for that admin. Lets the Office Admin pin a location per admin
+  /// right after creating their ID. Stored as `presenceBoundary` JSON.
+  static Future<void> setAdminBoundary({
+    required String adminDocId,
+    required double lat,
+    required double lng,
+    required double radiusMeters,
+  }) async {
+    await AppwriteService.databases.updateDocument(
+      databaseId: _db,
+      collectionId: 'users',
+      documentId: adminDocId,
+      data: {
+        'presenceBoundary': jsonEncode(
+            {'lat': lat, 'lng': lng, 'radiusMeters': radiusMeters}),
+      },
+    );
+  }
+
+  /// Marks onboarding complete and pins a fallback boundary. Does NOT clobber
+  /// a location the Office Admin already set for this admin — that per-admin
+  /// geofence wins over the global config. Returns the effective boundary
+  /// (may be null if neither a per-admin nor a global boundary exists yet).
   static Future<Map<String, dynamic>?> pinBoundaryAndCompleteOnboarding(
     String adminDocId,
   ) async {
-    final boundary = await getBoundaryConfig();
+    Map<String, dynamic>? existing;
+    try {
+      final doc = await AppwriteService.databases.getDocument(
+        databaseId: _db,
+        collectionId: 'users',
+        documentId: adminDocId,
+      );
+      existing = _parseBoundary(doc.data['presenceBoundary']);
+    } catch (_) {}
+
+    final boundary = existing ?? await getBoundaryConfig();
     final data = <String, dynamic>{
       'presenceOnboardedAt': DateTime.now().toIso8601String(),
     };
-    if (boundary != null) data['presenceBoundary'] = jsonEncode(boundary);
+    // Only write a pinned boundary if the admin doesn't already have one.
+    if (existing == null && boundary != null) {
+      data['presenceBoundary'] = jsonEncode(boundary);
+    }
     await AppwriteService.databases.updateDocument(
       databaseId: _db,
       collectionId: 'users',

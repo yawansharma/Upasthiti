@@ -1652,7 +1652,15 @@ class _AdminListTabState extends State<_AdminListTab> {
   Future<bool> _ensureNoOwnedClasses(models.Document adminDoc) async {
     final username = adminDoc.data['username'] as String? ?? '';
     while (true) {
-      final owned = await AdminHierarchyService.findOwnedClasses(username);
+      List<models.Document> owned;
+      try {
+        owned = await AdminHierarchyService.findOwnedClasses(username);
+      } catch (_) {
+        // If ownership can't be determined (e.g. classes collection has no
+        // headAdminId/supervisorId index), don't silently block the Dean —
+        // allow the suspend/delete to proceed rather than dead-ending.
+        return true;
+      }
       if (owned.isEmpty) return true;
       if (!mounted) return false;
 
@@ -1730,8 +1738,10 @@ class _AdminListTabState extends State<_AdminListTab> {
   void _showAdminDetails(models.Document doc) {
     final data = doc.data;
     final bool isActive = data['status'] != 'disabled';
-    final passCtrl =
-        TextEditingController(text: data['password'] as String? ?? '');
+    // Start empty — never pre-fill the stored value. The stored password is a
+    // one-way SHA-256 hash (not reversible), and pre-filling it would double-
+    // hash on save and lock the admin out. Typing here sets a NEW password.
+    final passCtrl = TextEditingController();
 
     showModalBottomSheet(
       context: context,
@@ -1833,24 +1843,41 @@ class _AdminListTabState extends State<_AdminListTab> {
               const SizedBox(height: 16),
               TextField(
                 controller: passCtrl,
+                obscureText: true,
                 decoration: InputDecoration(
-                  labelText: 'Override Password',
+                  labelText: 'Set New Password',
+                  hintText: 'Type a new password to reset',
+                  helperText: 'Stored securely as a one-way hash.',
                   border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12)),
                   suffixIcon: IconButton(
                     icon: const Icon(Icons.save, color: kDeanDark),
                     onPressed: () async {
-                      if (passCtrl.text.trim().isEmpty) return;
-                      await AppwriteService.databases.updateDocument(
-                        databaseId: AppwriteService.databaseId,
-                        collectionId: 'users',
-                        documentId: doc.$id,
-                        data: {'password': AppwriteService.hashPassword(passCtrl.text.trim())},
-                      );
-                      if (!mounted) return;
-                      ScaffoldMessenger.of(ctx).showSnackBar(
-                          const SnackBar(
-                              content: Text('Password overridden.')));
+                      final pw = passCtrl.text.trim();
+                      if (pw.isEmpty) return;
+                      if (pw.length < 6) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
+                            content: Text(
+                                'Password must be at least 6 characters.')));
+                        return;
+                      }
+                      try {
+                        await AppwriteService.databases.updateDocument(
+                          databaseId: AppwriteService.databaseId,
+                          collectionId: 'users',
+                          documentId: doc.$id,
+                          data: {'password': AppwriteService.hashPassword(pw)},
+                        );
+                        if (!mounted) return;
+                        passCtrl.clear();
+                        ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
+                            content: Text('Password reset.')));
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                              SnackBar(content: Text('Failed: $e')));
+                        }
+                      }
                     },
                   ),
                 ),
@@ -1881,17 +1908,26 @@ class _AdminListTabState extends State<_AdminListTab> {
                     final canProceed = await _ensureNoOwnedClasses(doc);
                     if (!canProceed) return;
                   }
-                  await AppwriteService.databases.updateDocument(
-                    databaseId: AppwriteService.databaseId,
-                    collectionId: 'users',
-                    documentId: doc.$id,
-                    data: {
-                      'status': isActive ? 'disabled' : 'active'
-                    },
-                  );
-                  if (!mounted) return;
-                  Navigator.pop(ctx);
-                  _fetchAdmins();
+                  try {
+                    await AppwriteService.databases.updateDocument(
+                      databaseId: AppwriteService.databaseId,
+                      collectionId: 'users',
+                      documentId: doc.$id,
+                      data: {'status': isActive ? 'disabled' : 'active'},
+                    );
+                    if (!mounted) return;
+                    Navigator.pop(ctx);
+                    _fetchAdmins();
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text(isActive
+                            ? 'Admin suspended.'
+                            : 'Admin reactivated.')));
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                          SnackBar(content: Text('Action failed: $e')));
+                    }
+                  }
                 },
               ),
               const Divider(),
@@ -1932,14 +1968,23 @@ class _AdminListTabState extends State<_AdminListTab> {
                     ),
                   );
                   if (confirm == true) {
-                    await AppwriteService.databases.deleteDocument(
-                      databaseId: AppwriteService.databaseId,
-                      collectionId: 'users',
-                      documentId: doc.$id,
-                    );
-                    if (!mounted) return;
-                    Navigator.pop(ctx);
-                    _fetchAdmins();
+                    try {
+                      await AppwriteService.databases.deleteDocument(
+                        databaseId: AppwriteService.databaseId,
+                        collectionId: 'users',
+                        documentId: doc.$id,
+                      );
+                      if (!mounted) return;
+                      Navigator.pop(ctx);
+                      _fetchAdmins();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Admin deleted.')));
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                            SnackBar(content: Text('Delete failed: $e')));
+                      }
+                    }
                   }
                 },
               ),

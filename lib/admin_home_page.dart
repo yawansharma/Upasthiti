@@ -433,7 +433,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
       ),
     );
 
-    // Event Management: Level 1 Institution Admins
+    // Event Management: Level 1 Institution Admins host + assign L2/L3.
     if (widget.adminLevel == 1) {
       actions.add(
         IconButton(
@@ -446,6 +446,29 @@ class _AdminHomePageState extends State<AdminHomePage> {
                 builder: (_) => EventManagementPage(
                   adminId: widget.adminId,
                   adminName: widget.adminName,
+                  mode: EventMode.host,
+                ),
+              ),
+            );
+          },
+        ),
+      );
+    }
+
+    // Assigned Events: Level 2/3 admins view + claim presence at events.
+    if (widget.adminLevel == 2 || widget.adminLevel == 3) {
+      actions.add(
+        IconButton(
+          icon: const Icon(Icons.event_available_outlined, color: Colors.white),
+          tooltip: "My Assigned Events",
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => EventManagementPage(
+                  adminId: widget.adminId,
+                  adminName: widget.adminName,
+                  mode: EventMode.assigned,
                 ),
               ),
             );

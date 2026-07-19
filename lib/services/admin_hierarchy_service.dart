@@ -346,29 +346,22 @@ class AdminHierarchyService {
   /// Classes where [username] is currently the head admin (L3) or
   /// supervisor (L2). Used to block suspending/deleting an admin who still
   /// owns classes, so they don't silently orphan.
+  ///
+  /// Reads assignments via [readAssignments], which handles both the mirrored
+  /// top-level fields AND the `boundary` JSON — so it works even when the
+  /// `classes` collection has no `headAdminId`/`supervisorId` columns (they
+  /// live inside `boundary`).
   static Future<List<models.Document>> findOwnedClasses(
     String username,
   ) async {
+    if (username.isEmpty) return [];
     final found = <String, models.Document>{};
-
-    final byHead = await AppwriteService.databases.listDocuments(
-      databaseId: databaseId,
-      collectionId: classesCollection,
-      queries: [Query.equal('headAdminId', username), Query.limit(200)],
-    );
-    for (final d in byHead.documents) {
-      found[d.$id] = d;
+    for (final classDoc in await _listAllClasses()) {
+      final a = readAssignments(classDoc.data);
+      if (a.headAdminId == username || a.supervisorId == username) {
+        found[classDoc.$id] = classDoc;
+      }
     }
-
-    final bySupervisor = await AppwriteService.databases.listDocuments(
-      databaseId: databaseId,
-      collectionId: classesCollection,
-      queries: [Query.equal('supervisorId', username), Query.limit(200)],
-    );
-    for (final d in bySupervisor.documents) {
-      found[d.$id] = d;
-    }
-
     return found.values.toList();
   }
 

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -2925,28 +2926,88 @@ class _AdminsTabState extends State<_AdminsTab> {
                         color: Colors.red.shade700,
                         fontWeight: FontWeight.bold)),
               ),
-            if (level != 1)
-              TextButton(
-                onPressed: () => _editParent(doc),
-                style: TextButton.styleFrom(
-                    foregroundColor: _kOAAccent,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    minimumSize: Size.zero),
-                child: const Text('Edit', style: TextStyle(fontSize: 12)),
-              ),
-            TextButton(
-              onPressed: () => _toggleStatus(doc),
-              style: TextButton.styleFrom(
-                  foregroundColor: isDisabled ? Colors.green : Colors.red,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  minimumSize: Size.zero),
-              child: Text(isDisabled ? 'Enable' : 'Disable',
-                  style: const TextStyle(fontSize: 12)),
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert, size: 20),
+              onSelected: (v) {
+                switch (v) {
+                  case 'location':
+                    _setAdminLocation(doc);
+                    break;
+                  case 'parent':
+                    _editParent(doc);
+                    break;
+                  case 'status':
+                    _toggleStatus(doc);
+                    break;
+                }
+              },
+              itemBuilder: (_) => [
+                const PopupMenuItem(
+                  value: 'location',
+                  child: Row(children: [
+                    Icon(Icons.my_location, size: 18, color: _kOAAccent),
+                    SizedBox(width: 10),
+                    Text('Set location'),
+                  ]),
+                ),
+                if (level != 1)
+                  const PopupMenuItem(
+                    value: 'parent',
+                    child: Row(children: [
+                      Icon(Icons.account_tree_outlined,
+                          size: 18, color: _kOAAccent),
+                      SizedBox(width: 10),
+                      Text('Edit reporting line'),
+                    ]),
+                  ),
+                PopupMenuItem(
+                  value: 'status',
+                  child: Row(children: [
+                    Icon(isDisabled ? Icons.check_circle_outline : Icons.block,
+                        size: 18,
+                        color: isDisabled ? Colors.green : Colors.red),
+                    const SizedBox(width: 10),
+                    Text(isDisabled ? 'Enable' : 'Disable'),
+                  ]),
+                ),
+              ],
             ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _setAdminLocation(models.Document doc) async {
+    final name = doc.data['name'] as String? ?? doc.data['username'] as String? ?? 'admin';
+    Map<String, dynamic>? existing;
+    final raw = doc.data['presenceBoundary'];
+    if (raw is String && raw.isNotEmpty) {
+      try {
+        final d = jsonDecode(raw);
+        if (d is Map && d['lat'] != null && d['lng'] != null && d['radiusMeters'] != null) {
+          existing = {
+            'lat': (d['lat'] as num).toDouble(),
+            'lng': (d['lng'] as num).toDouble(),
+            'radiusMeters': (d['radiusMeters'] as num).toDouble(),
+          };
+        }
+      } catch (_) {}
+    }
+    final picked = await _openBoundaryPicker(existing);
+    if (picked == null) return;
+    try {
+      await AdminPresenceService.setAdminBoundary(
+        adminDocId: doc.$id,
+        lat: picked['lat'],
+        lng: picked['lng'],
+        radiusMeters: picked['radiusMeters'],
+      );
+      _fetch();
+      _snack("Location set for $name.");
+    } catch (e) {
+      _snack('Failed to set location: $e');
+    }
   }
 
   Future<void> _toggleStatus(models.Document doc) async {
