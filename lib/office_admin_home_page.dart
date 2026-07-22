@@ -73,15 +73,19 @@ class _OfficeAdminHomePageState extends State<OfficeAdminHomePage> {
   }
 
   void _logout() {
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const LoginPage()),
-      (route) => false,
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Please use the Sign Out button in the presence card to log out.'),
+        behavior: SnackBarBehavior.floating,
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      child: Scaffold(
       backgroundColor: AppTheme.kDark,
       body: SafeArea(
         bottom: false,
@@ -185,7 +189,8 @@ class _OfficeAdminHomePageState extends State<OfficeAdminHomePage> {
               label: "Audit"),
         ],
       ),
-    );
+    ), // Scaffold
+    ); // PopScope
   }
 }
 
@@ -291,6 +296,7 @@ class _OverviewTabState extends State<_OverviewTab> {
                       level: 0,
                       department: widget.department,
                       accent: _kOAAccent,
+                      requiresLogoutVerification: true,
                       onSignedOut: () {
                         Navigator.of(context).pushAndRemoveUntil(
                           MaterialPageRoute(builder: (_) => const LoginPage()),

@@ -22,6 +22,11 @@ class AdminPresenceCard extends StatefulWidget {
   /// Called after sign-out is recorded (e.g. to log the user out of the app).
   final VoidCallback? onSignedOut;
 
+  /// When true, the Sign Out button requires a successful location + face
+  /// verification before proceeding. Intended for Level 2 / 3 admins and
+  /// all special-role admins (Office, Event, HR, Security).
+  final bool requiresLogoutVerification;
+
   const AdminPresenceCard({
     super.key,
     required this.adminId,
@@ -32,6 +37,7 @@ class AdminPresenceCard extends StatefulWidget {
     this.parentAdminId,
     required this.accent,
     this.onSignedOut,
+    this.requiresLogoutVerification = false,
   });
 
   @override
@@ -176,6 +182,72 @@ class _AdminPresenceCardState extends State<AdminPresenceCard> {
 
   Future<void> _signOut() async {
     if (_busy) return;
+
+    // ── Verified sign-out for L2/L3 and special-role admins ─────────────────
+    if (widget.requiresLogoutVerification) {
+      setState(() => _busy = true);
+      final progress = ValueNotifier<String>('Checking your location…');
+      _showProgress(progress);
+      try {
+        final boundary =
+            await AdminPresenceService.boundaryForAdmin(widget.adminId);
+        if (boundary == null) {
+          _closeProgress();
+          _snack(
+              'Your presence location has not been set. Cannot sign out remotely.');
+          setState(() => _busy = false);
+          return;
+        }
+        bool inside = false;
+        try {
+          inside = await AdminPresenceService.isInsideBoundary(boundary);
+        } catch (_) {
+          inside = false;
+        }
+        if (!inside) {
+          _closeProgress();
+          _snack(
+              'You are outside your assigned location. Move closer to sign out.');
+          setState(() => _busy = false);
+          return;
+        }
+
+        progress.value = 'Opening camera…';
+        if (!mounted) return;
+        final photo =
+            await AdminPresenceService.capturePhoto(context);
+        if (photo == null) {
+          _closeProgress();
+          _snack('A photo is required to sign out.');
+          setState(() => _busy = false);
+          return;
+        }
+
+        progress.value = 'Verifying your face…';
+        final faceError =
+            await AdminPresenceService.verifyFace(widget.adminId, photo);
+        if (faceError != null) {
+          _closeProgress();
+          _snack('Face verification failed: $faceError');
+          setState(() => _busy = false);
+          return;
+        }
+
+        progress.value = 'Signing out…';
+        await AdminPresenceService.signOut(widget.adminId);
+        _closeProgress();
+        await _refresh();
+        widget.onSignedOut?.call();
+      } catch (e) {
+        _closeProgress();
+        _snack('Sign-out failed: $e');
+      } finally {
+        if (mounted) setState(() => _busy = false);
+      }
+      return;
+    }
+
+    // ── Standard sign-out (L1 / Dean — no verification required) ────────────
     setState(() => _busy = true);
     try {
       await AdminPresenceService.signOut(widget.adminId);

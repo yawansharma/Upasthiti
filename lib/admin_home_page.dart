@@ -240,7 +240,9 @@ class _AdminHomePageState extends State<AdminHomePage> {
   // ---------------------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      child: Scaffold(
       backgroundColor: const Color(0xFF101010),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
@@ -252,10 +254,12 @@ class _AdminHomePageState extends State<AdminHomePage> {
             if (widget.isDean) {
               Navigator.pop(context);
             } else {
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(builder: (_) => const LoginPage()),
-                (route) => false,
+              // Back navigation is disabled for security — use Sign Out button.
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Please use the Sign Out button in the presence card to log out.'),
+                  behavior: SnackBarBehavior.floating,
+                ),
               );
             }
           },
@@ -318,6 +322,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                           department: _adminDepartment ?? '',
                           parentAdminId: _adminParentId,
                           accent: AppTheme.kGreen,
+                          requiresLogoutVerification: widget.adminLevel >= 2,
                           onSignedOut: () {
                             Navigator.pushAndRemoveUntil(
                               context,
@@ -394,7 +399,8 @@ class _AdminHomePageState extends State<AdminHomePage> {
           ),
         ],
       ),
-    );
+    ), // Scaffold
+    ); // PopScope
   }
 
   String _tabTitle() {

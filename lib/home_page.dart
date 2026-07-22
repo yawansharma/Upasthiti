@@ -434,7 +434,9 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      child: Scaffold(
       backgroundColor: AppTheme.kDark,
       appBar: AppBar(
         title: const Text("Dashboard"),
@@ -529,7 +531,8 @@ class _HomePageState extends State<HomePage> {
           ),
         ],
       ),
-    );
+    ), // Scaffold
+    ); // PopScope
   }
 
   Widget _buildContent(BuildContext context) {

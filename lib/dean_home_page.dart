@@ -38,7 +38,9 @@ class _DeanHomePageState extends State<DeanHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      child: Scaffold(
       backgroundColor: kDeanDark,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
@@ -152,7 +154,8 @@ class _DeanHomePageState extends State<DeanHomePage> {
           ),
         ],
       ),
-    );
+    ), // Scaffold
+    ); // PopScope
   }
 
   String _tabTitle() {

@@ -33,7 +33,9 @@ class _SecurityAdminHomePageState extends State<SecurityAdminHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      child: Scaffold(
       backgroundColor: AppTheme.kDark,
       body: SafeArea(
         bottom: false,
@@ -47,6 +49,7 @@ class _SecurityAdminHomePageState extends State<SecurityAdminHomePage> {
               level: 0,
               department: '',
               accent: _kSAAccent,
+              requiresLogoutVerification: true,
               onSignedOut: () {
                 Navigator.of(context).popUntil((r) => r.isFirst);
                 Navigator.pushReplacement(
@@ -83,7 +86,8 @@ class _SecurityAdminHomePageState extends State<SecurityAdminHomePage> {
           ],
         ),
       ),
-    );
+    ), // Scaffold
+    ); // PopScope
   }
 
   Widget _buildHeader(BuildContext context) {
@@ -206,32 +210,10 @@ class _SecurityAdminHomePageState extends State<SecurityAdminHomePage> {
   }
 
   void _confirmLogout(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20)),
-        title: const Text("Logout"),
-        content: const Text("Are you sure you want to log out?"),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
-          ),
-          ElevatedButton(
-            style:
-                ElevatedButton.styleFrom(backgroundColor: _kSAAccent),
-            onPressed: () {
-              Navigator.of(context).popUntil((r) => r.isFirst);
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (_) => const LoginPage()),
-              );
-            },
-            child: const Text("Logout",
-                style: TextStyle(color: Colors.white)),
-          ),
-        ],
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Please use the Sign Out button in the presence card to log out.'),
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }
