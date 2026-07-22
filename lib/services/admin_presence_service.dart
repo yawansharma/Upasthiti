@@ -21,8 +21,9 @@ class PresenceResult {
 }
 
 /// Shared logic for the admin presence system:
-///  - the institution-wide geofence the Office Admin sets (`admin_presence_config`)
-///  - first-login face registration + boundary pinning (see AdminOnboardingPage)
+///  - each admin's own individual geofence, set by the Dean/Office Admin
+///    (there is no shared/common boundary — see [boundaryForAdmin])
+///  - first-login face registration (see AdminOnboardingPage)
 ///  - the once-a-day "Report presence" / sign-out flow (`admin_presence_logs`)
 ///
 /// Reuses the same ML face backend and geofence approach as the student flow in
@@ -30,8 +31,6 @@ class PresenceResult {
 class AdminPresenceService {
   static String get _db => AppwriteService.databaseId;
 
-  static const String configCollection = 'admin_presence_config';
-  static const String configDocId = 'campus';
   static const String logsCollection = 'admin_presence_logs';
 
   /// Presence can only be reported after 05:30 local time.
@@ -76,60 +75,17 @@ class AdminPresenceService {
     };
   }
 
-  /// The institution-wide boundary the Office Admin configured, or null.
-  static Future<Map<String, dynamic>?> getBoundaryConfig() async {
-    try {
-      final doc = await AppwriteService.databases.getDocument(
-        databaseId: _db,
-        collectionId: configCollection,
-        documentId: configDocId,
-      );
-      return _parseBoundary(doc.data);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  /// Upsert the institution-wide presence boundary.
-  static Future<void> setBoundaryConfig({
-    required double lat,
-    required double lng,
-    required double radiusMeters,
-    required String updatedBy,
-  }) async {
-    final data = {
-      'lat': lat,
-      'lng': lng,
-      'radiusMeters': radiusMeters,
-      'updatedBy': updatedBy,
-      'updatedAt': DateTime.now().toIso8601String(),
-    };
-    try {
-      await AppwriteService.databases.updateDocument(
-        databaseId: _db,
-        collectionId: configCollection,
-        documentId: configDocId,
-        data: data,
-      );
-    } catch (_) {
-      await AppwriteService.databases.createDocument(
-        databaseId: _db,
-        collectionId: configCollection,
-        documentId: configDocId,
-        data: data,
-      );
-    }
-  }
-
-  /// Boundary an admin is checked against: the boundary pinned onto their own
-  /// account at onboarding, falling back to the current institution config.
+  /// Boundary an admin is checked against — strictly per-admin, set
+  /// individually by the Dean/Office Admin (usually at creation time). There
+  /// is no shared/common fallback: an admin with no boundary set cannot
+  /// report presence at all until one is assigned to them specifically.
   static Future<Map<String, dynamic>?> boundaryForAdmin(String adminId) async {
     try {
       final admin = await AdminHierarchyService.findUserByUsername(adminId);
-      final pinned = _parseBoundary(admin?.data['presenceBoundary']);
-      if (pinned != null) return pinned;
-    } catch (_) {}
-    return getBoundaryConfig();
+      return _parseBoundary(admin?.data['presenceBoundary']);
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Sets a specific admin's own presence geofence, overriding the global
@@ -152,10 +108,11 @@ class AdminPresenceService {
     );
   }
 
-  /// Marks onboarding complete and pins a fallback boundary. Does NOT clobber
-  /// a location the Office Admin already set for this admin — that per-admin
-  /// geofence wins over the global config. Returns the effective boundary
-  /// (may be null if neither a per-admin nor a global boundary exists yet).
+  /// Marks first-login onboarding complete. Does NOT assign any boundary —
+  /// there is no shared default to fall back to. The Dean/Office Admin must
+  /// have already set this specific admin's location (normally done at
+  /// creation time via [setAdminBoundary]); if they haven't, the admin stays
+  /// unable to report presence until one is set for their account.
   static Future<Map<String, dynamic>?> pinBoundaryAndCompleteOnboarding(
     String adminDocId,
   ) async {
@@ -169,21 +126,13 @@ class AdminPresenceService {
       existing = _parseBoundary(doc.data['presenceBoundary']);
     } catch (_) {}
 
-    final boundary = existing ?? await getBoundaryConfig();
-    final data = <String, dynamic>{
-      'presenceOnboardedAt': DateTime.now().toIso8601String(),
-    };
-    // Only write a pinned boundary if the admin doesn't already have one.
-    if (existing == null && boundary != null) {
-      data['presenceBoundary'] = jsonEncode(boundary);
-    }
     await AppwriteService.databases.updateDocument(
       databaseId: _db,
       collectionId: 'users',
       documentId: adminDocId,
-      data: data,
+      data: {'presenceOnboardedAt': DateTime.now().toIso8601String()},
     );
-    return boundary;
+    return existing;
   }
 
   // ── Geofence check (mirrors class_detail_page._checkGeofence) ───────────

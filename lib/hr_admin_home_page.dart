@@ -6,13 +6,13 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:csv/csv.dart';
 import 'package:excel/excel.dart' hide Border, Center;
-import 'package:path_provider/path_provider.dart';
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'app_theme.dart';
 import 'main.dart';
 import 'services/appwrite_service.dart';
 import 'services/leave_service.dart';
+import 'services/export_service.dart';
 import 'components/user_avatar.dart';
 import 'components/admin_presence_card.dart';
 
@@ -1181,10 +1181,9 @@ class _HRReportsTabState extends State<_HRReportsTab> {
         queries: queries,
       );
 
-      final dir = await getApplicationDocumentsDirectory();
       final timestamp =
           DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
-      String filePath;
+      String? savedPath;
 
       if (format == 'csv') {
         final rows = [
@@ -1212,8 +1211,10 @@ class _HRReportsTabState extends State<_HRReportsTab> {
         ];
         final csv =
             const ListToCsvConverter().convert(rows.cast<List>());
-        filePath = '${dir.path}/hr_attendance_$timestamp.csv';
-        await File(filePath).writeAsString(csv);
+        savedPath = await ExportService.saveText(
+          content: csv,
+          fileName: 'hr_attendance_$timestamp.csv',
+        );
       } else {
         final excel = Excel.createExcel();
         final sheet = excel['Attendance'];
@@ -1244,17 +1245,19 @@ class _HRReportsTabState extends State<_HRReportsTab> {
             TextCellValue(d['timestamp']?.toString() ?? ''),
           ]);
         }
-        filePath = '${dir.path}/hr_attendance_$timestamp.xlsx';
         final bytes = excel.encode();
         if (bytes != null) {
-          await File(filePath).writeAsBytes(bytes);
+          savedPath = await ExportService.saveBytes(
+            bytes: Uint8List.fromList(bytes),
+            fileName: 'hr_attendance_$timestamp.xlsx',
+          );
         }
       }
 
       if (mounted) {
         setState(() {
           _exporting = false;
-          _lastExportPath = filePath;
+          _lastExportPath = savedPath;
         });
       }
     } catch (e) {
