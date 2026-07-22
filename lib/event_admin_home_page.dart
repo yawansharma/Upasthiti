@@ -80,9 +80,11 @@ class EventAdminHomePage extends StatelessWidget {
               ],
             ),
           ),
-          IconButton(
+          TextButton.icon(
             onPressed: () => _confirmLogout(context),
-            icon: const Icon(Icons.logout, color: Colors.white70, size: 20),
+            icon: const Icon(Icons.logout, color: Colors.white70, size: 18),
+            label: const Text("Logout",
+                style: TextStyle(color: Colors.white70, fontSize: 13)),
           ),
         ],
       ),

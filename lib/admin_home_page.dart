@@ -23,6 +23,7 @@ import 'admin_student_directory_page.dart';
 import 'event_management_page.dart';
 import 'components/user_avatar.dart';
 import 'components/admin_presence_card.dart';
+import 'components/notification_bell.dart';
 
 // =============================================================================
 // AdminHomePage Ã¢â‚¬â€ 3-tab shell: Classes | Analytics | Settings
@@ -418,6 +419,12 @@ class _AdminHomePageState extends State<AdminHomePage> {
 
   List<Widget> _buildAppBarActions() {
     List<Widget> actions = [];
+
+    // Notifications: L1/L2 receive escalations from admins reporting to them.
+    if (!widget.isDean &&
+        (widget.adminLevel == 1 || widget.adminLevel == 2)) {
+      actions.add(NotificationBell(recipientId: widget.adminId));
+    }
 
     // Org Chart: All Admins
     actions.add(

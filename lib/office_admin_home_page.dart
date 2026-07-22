@@ -13,16 +13,13 @@ import 'package:http/http.dart' as http;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
-import 'package:geolocator/geolocator.dart';
-
 import 'app_theme.dart';
 import 'services/appwrite_service.dart';
 import 'services/admin_presence_service.dart';
 import 'services/export_service.dart';
 import 'components/user_avatar.dart';
 import 'components/admin_presence_card.dart';
+import 'components/boundary_picker.dart';
 import 'office_admin_student_attendance_page.dart';
 import 'main.dart';
 
@@ -126,13 +123,12 @@ class _OfficeAdminHomePageState extends State<OfficeAdminHomePage> {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  IconButton(
+                  TextButton.icon(
                     onPressed: _logout,
                     icon: const Icon(Icons.logout_rounded,
-                        color: Colors.white70, size: 20),
-                    tooltip: "Logout",
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
+                        color: Colors.white70, size: 18),
+                    label: const Text("Logout",
+                        style: TextStyle(color: Colors.white70, fontSize: 13)),
                   ),
                 ],
               ),
@@ -2103,7 +2099,10 @@ class _AdminsTabState extends State<_AdminsTab> {
         databaseId: _kDb,
         collectionId: 'users',
         queries: [
-          Query.equal('role', 'admin'),
+          // Hierarchy admins + the special roles the Office Admin also sets
+          // locations for. (Office Admins themselves are managed by the Dean.)
+          Query.equal('role',
+              ['admin', 'eventAdmin', 'hrAdmin', 'securityAdmin']),
           Query.limit(500),
         ],
       );
@@ -2313,8 +2312,8 @@ class _AdminsTabState extends State<_AdminsTab> {
                   const SizedBox(height: 14),
                   InkWell(
                     onTap: () async {
-                      final picked =
-                          await _openBoundaryPicker(selectedBoundary);
+                      final picked = await showBoundaryPicker(context,
+                          accent: _kOAAccent, existing: selectedBoundary);
                       if (picked != null) {
                         setSheetState(() => selectedBoundary = picked);
                       }
@@ -2532,179 +2531,6 @@ class _AdminsTabState extends State<_AdminsTab> {
     }
   }
 
-  Future<Map<String, dynamic>?> _openBoundaryPicker(
-      Map<String, dynamic>? existing) async {
-    LatLng pos;
-    if (existing != null) {
-      pos = LatLng((existing['lat'] as num).toDouble(),
-          (existing['lng'] as num).toDouble());
-    } else {
-      try {
-        final loc = await Geolocator.getCurrentPosition(
-            desiredAccuracy: LocationAccuracy.high);
-        pos = LatLng(loc.latitude, loc.longitude);
-      } catch (_) {
-        pos = const LatLng(20.59, 78.96);
-      }
-    }
-    double radius =
-        existing != null ? (existing['radiusMeters'] as num).toDouble() : 100.0;
-    LatLng current = pos;
-    final mapController = MapController();
-    if (!mounted) return null;
-
-    return showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (dialogCtx) => AlertDialog(
-        contentPadding: EdgeInsets.zero,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        content: SizedBox(
-          height: 560,
-          width: 600,
-          child: Column(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                decoration: const BoxDecoration(
-                  color: _kOAAccent,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.my_location, color: Colors.white, size: 22),
-                    const SizedBox(width: 10),
-                    const Expanded(
-                      child: Text("Set Presence Boundary",
-                          style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15)),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white),
-                      onPressed: () => Navigator.pop(dialogCtx),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: StatefulBuilder(builder: (_, setSt) {
-                  return Stack(
-                    children: [
-                      FlutterMap(
-                        mapController: mapController,
-                        options: MapOptions(
-                          initialCenter: pos,
-                          initialZoom: 16,
-                          onTap: (_, p) => setSt(() => current = p),
-                        ),
-                        children: [
-                          TileLayer(
-                            urlTemplate:
-                                'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                            userAgentPackageName: 'com.virtualvision.admin',
-                          ),
-                          CircleLayer(circles: [
-                            CircleMarker(
-                              point: current,
-                              radius: radius,
-                              useRadiusInMeter: true,
-                              color: _kOAAccent.withValues(alpha: 0.18),
-                              borderColor: _kOAAccent,
-                              borderStrokeWidth: 2,
-                            ),
-                          ]),
-                          MarkerLayer(markers: [
-                            Marker(
-                              point: current,
-                              width: 40,
-                              height: 40,
-                              child: const Icon(Icons.location_on,
-                                  color: Colors.red, size: 40),
-                            ),
-                          ]),
-                        ],
-                      ),
-                      Positioned(
-                        bottom: 0,
-                        left: 0,
-                        right: 0,
-                        child: Container(
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
-                            borderRadius:
-                                BorderRadius.vertical(top: Radius.circular(20)),
-                          ),
-                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(children: [
-                                const Icon(Icons.my_location,
-                                    size: 13, color: Colors.grey),
-                                const SizedBox(width: 6),
-                                Text(
-                                  "${current.latitude.toStringAsFixed(5)}, ${current.longitude.toStringAsFixed(5)}",
-                                  style: const TextStyle(
-                                      fontSize: 12, fontWeight: FontWeight.w600),
-                                ),
-                              ]),
-                              const SizedBox(height: 6),
-                              Row(children: [
-                                const Icon(Icons.radio_button_checked,
-                                    size: 13, color: _kOAAccent),
-                                const SizedBox(width: 6),
-                                Text("Radius: ${radius.toStringAsFixed(0)} m",
-                                    style: const TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600)),
-                                Expanded(
-                                  child: Slider(
-                                    value: radius,
-                                    min: 30,
-                                    max: 500,
-                                    divisions: 47,
-                                    activeColor: _kOAAccent,
-                                    onChanged: (v) => setSt(() => radius = v),
-                                  ),
-                                ),
-                              ]),
-                              const SizedBox(height: 6),
-                              SizedBox(
-                                width: double.infinity,
-                                child: ElevatedButton(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: _kOAAccent,
-                                    foregroundColor: Colors.white,
-                                    shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(10)),
-                                  ),
-                                  onPressed: () => Navigator.pop(dialogCtx, {
-                                    'lat': current.latitude,
-                                    'lng': current.longitude,
-                                    'radiusMeters': radius,
-                                  }),
-                                  child: const Text("Confirm Boundary",
-                                      style: TextStyle(
-                                          fontWeight: FontWeight.bold)),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                }),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   // ── Export admin activity to Excel ─────────────────────────────────────
   Future<void> _exportActivity() async {
     final range = await showDateRangePicker(
@@ -2897,9 +2723,18 @@ class _AdminsTabState extends State<_AdminsTab> {
   Widget _adminCard(models.Document doc) {
     final data = doc.data;
     final name = data['name'] as String? ?? data['username'] as String? ?? '';
+    final role = data['role'] as String? ?? 'admin';
+    final isHierarchy = role == 'admin';
     final level = data['level'];
     final parent = data['parentAdminName'] as String? ?? data['parentAdminId'] as String?;
     final isDisabled = data['status'] == 'disabled';
+    const roleBadges = {
+      'officeAdmin': 'OA',
+      'eventAdmin': 'EA',
+      'hrAdmin': 'HR',
+      'securityAdmin': 'SA',
+    };
+    final avatarText = isHierarchy ? 'L${level ?? '?'}' : (roleBadges[role] ?? '?');
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
@@ -2911,7 +2746,7 @@ class _AdminsTabState extends State<_AdminsTab> {
             CircleAvatar(
               radius: 20,
               backgroundColor: _kOAAccent.withValues(alpha: 0.12),
-              child: Text('L${level ?? '?'}',
+              child: Text(avatarText,
                   style: const TextStyle(
                       color: _kOAAccent, fontWeight: FontWeight.bold, fontSize: 12)),
             ),
@@ -2926,21 +2761,22 @@ class _AdminsTabState extends State<_AdminsTab> {
                           fontSize: 14,
                           color: Colors.black87),
                       overflow: TextOverflow.ellipsis),
-                  Text(_roleLevelLabel(data['role'] as String?, level),
+                  Text(_roleLevelLabel(role, level),
                       style: TextStyle(
                           fontSize: 11, color: Colors.grey.shade600)),
-                  Text(
-                    level == 1
-                        ? 'Reports to: Dean'
-                        : (parent != null && parent.isNotEmpty
-                            ? 'Reports to: $parent'
-                            : 'Reports to: — (unassigned)'),
-                    style: TextStyle(
-                        fontSize: 11,
-                        color: (level != 1 && (parent == null || parent.isEmpty))
-                            ? Colors.orange.shade700
-                            : Colors.grey.shade500),
-                  ),
+                  if (isHierarchy)
+                    Text(
+                      level == 1
+                          ? 'Reports to: Dean'
+                          : (parent != null && parent.isNotEmpty
+                              ? 'Reports to: $parent'
+                              : 'Reports to: — (unassigned)'),
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: (level != 1 && (parent == null || parent.isEmpty))
+                              ? Colors.orange.shade700
+                              : Colors.grey.shade500),
+                    ),
                 ],
               ),
             ),
@@ -2981,7 +2817,7 @@ class _AdminsTabState extends State<_AdminsTab> {
                     Text('Set location'),
                   ]),
                 ),
-                if (level != 1)
+                if (isHierarchy && level != 1)
                   const PopupMenuItem(
                     value: 'parent',
                     child: Row(children: [
@@ -3025,7 +2861,8 @@ class _AdminsTabState extends State<_AdminsTab> {
         }
       } catch (_) {}
     }
-    final picked = await _openBoundaryPicker(existing);
+    final picked = await showBoundaryPicker(context,
+        accent: _kOAAccent, existing: existing, title: "Set Location · $name");
     if (picked == null) return;
     try {
       await AdminPresenceService.setAdminBoundary(

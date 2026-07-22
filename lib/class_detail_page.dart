@@ -35,6 +35,7 @@ class ClassDetailPage extends StatefulWidget {
 
 class _ClassDetailPageState extends State<ClassDetailPage> {
   bool _isReporting = false;
+  String? _lastUploadError;
 
   bool get _hasBoundary =>
       widget.boundary != null &&
@@ -129,7 +130,7 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
     try {
       final fileId = ID.unique();
       final file = await AppwriteService.storage.createFile(
-        bucketId: 'attendance_photos',
+        bucketId: AppwriteService.attendancePhotosBucket,
         fileId: fileId,
         file: InputFile.fromPath(
           path: photo.path,
@@ -137,9 +138,10 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
               '${widget.username}_${DateTime.now().millisecondsSinceEpoch}.jpg',
         ),
       );
-
-      return "${AppwriteService.endpoint}/storage/buckets/attendance_photos/files/${file.$id}/view?project=${AppwriteService.projectId}";
-    } catch (_) {
+      _lastUploadError = null;
+      return "${AppwriteService.endpoint}/storage/buckets/${AppwriteService.attendancePhotosBucket}/files/${file.$id}/view?project=${AppwriteService.projectId}";
+    } catch (e) {
+      _lastUploadError = e.toString();
       return null;
     }
   }
@@ -314,7 +316,7 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
         setState(() {}); // Refresh the FutureBuilders
         if (photoUrl == null) {
           _showSnackBar(
-              "Attendance saved, but your photo failed to upload — contact your admin if this repeats.");
+              "Attendance saved, but photo upload failed: ${_lastUploadError ?? 'unknown error'}");
         }
         _showSuccessTicket(isWithinGeofence, entryStatus, activePeriod);
       }

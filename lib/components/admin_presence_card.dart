@@ -48,6 +48,7 @@ class _AdminPresenceCardState extends State<AdminPresenceCard> {
   models.Document? _today;
   bool _loading = true;
   bool _busy = false;
+  int _resetsUsed = 0;
 
   @override
   void initState() {
@@ -70,11 +71,60 @@ class _AdminPresenceCardState extends State<AdminPresenceCard> {
 
   Future<void> _refresh() async {
     final doc = await AdminPresenceService.fetchTodayLog(widget.adminId);
+    final used =
+        await AdminPresenceService.resetsUsedThisWeek(widget.adminId);
     if (mounted) {
       setState(() {
         _today = doc;
+        _resetsUsed = used;
         _loading = false;
       });
+    }
+  }
+
+  Future<void> _retry() async {
+    if (_busy) return;
+    final remaining = AdminPresenceService.weeklyResetAllowance - _resetsUsed;
+    final over = remaining <= 0;
+    final proceed = await showDialog<bool>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Undo sign-out'),
+        content: Text(over
+            ? "You've used all ${AdminPresenceService.weeklyResetAllowance} free undos this week. You can still undo, but your higher in-charge will be notified. Continue?"
+            : "Signed out by mistake? You can undo it and go back to Present.\n\nYou get ${AdminPresenceService.weeklyResetAllowance} undos per week ($remaining left). Beyond that, each undo notifies your higher in-charge."),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dctx, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: widget.accent),
+            onPressed: () => Navigator.pop(dctx, true),
+            child: const Text('Undo sign-out',
+                style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (proceed != true) return;
+    setState(() => _busy = true);
+    try {
+      final used = await AdminPresenceService.resetSignOut(
+        adminId: widget.adminId,
+        adminName: widget.adminName,
+        role: widget.role,
+        level: widget.level,
+        parentAdminId: widget.parentAdminId,
+      );
+      await _refresh();
+      _snack(used > AdminPresenceService.weeklyResetAllowance
+          ? 'Sign-out undone. Your in-charge has been notified.'
+          : 'Sign-out undone — you are marked Present again.');
+    } catch (e) {
+      _snack('Could not undo: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -408,6 +458,30 @@ class _AdminPresenceCardState extends State<AdminPresenceCard> {
                                 fontWeight: FontWeight.bold, fontSize: 14)),
                       ),
                     ),
+                ],
+                if (_signedOut) ...[
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _busy ? null : _retry,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: accent,
+                        side: BorderSide(color: accent.withValues(alpha: 0.5)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                      icon: const Icon(Icons.replay_rounded, size: 18),
+                      label: Text(
+                        _resetsUsed >= AdminPresenceService.weeklyResetAllowance
+                            ? 'Undo sign-out (limit reached)'
+                            : 'Undo sign-out · ${AdminPresenceService.weeklyResetAllowance - _resetsUsed} left this week',
+                        style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w600, fontSize: 13),
+                      ),
+                    ),
+                  ),
                 ],
               ],
             ),

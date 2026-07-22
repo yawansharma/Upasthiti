@@ -144,14 +144,11 @@ class _SecurityAdminHomePageState extends State<SecurityAdminHomePage> {
               ),
             ),
           ),
-          const SizedBox(width: 8),
-          IconButton(
+          TextButton.icon(
             onPressed: () => _confirmLogout(context),
-            icon: const Icon(Icons.logout,
-                color: Colors.white70, size: 20),
-            tooltip: "Logout",
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
+            icon: const Icon(Icons.logout, color: Colors.white70, size: 18),
+            label: const Text("Logout",
+                style: TextStyle(color: Colors.white70, fontSize: 13)),
           ),
         ],
       ),

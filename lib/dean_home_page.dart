@@ -15,8 +15,11 @@ import 'admin_hierarchy_views.dart';
 import 'app_theme.dart';
 import 'services/appwrite_service.dart';
 import 'services/admin_hierarchy_service.dart';
+import 'services/admin_presence_service.dart';
 import 'services/leave_service.dart';
 import 'services/export_service.dart';
+import 'components/boundary_picker.dart';
+import 'components/notification_bell.dart';
 import 'distribution/dean_distribution_tab.dart';
 import 'components/user_avatar.dart';
 
@@ -80,6 +83,7 @@ class _DeanHomePageState extends State<DeanHomePage> {
             ),
           ],
         ),
+        actions: const [NotificationBell(recipientId: 'dean')],
       ),
       body: Column(
         children: [
@@ -1971,6 +1975,49 @@ class _AdminListTabState extends State<_AdminListTab> {
     }
   }
 
+  Future<void> _setAdminLocation(
+      BuildContext sheetCtx, models.Document doc) async {
+    final name =
+        doc.data['name'] as String? ?? doc.data['username'] as String? ?? 'admin';
+    Map<String, dynamic>? existing;
+    final raw = doc.data['presenceBoundary'];
+    if (raw is String && raw.isNotEmpty) {
+      try {
+        final d = jsonDecode(raw);
+        if (d is Map &&
+            d['lat'] != null &&
+            d['lng'] != null &&
+            d['radiusMeters'] != null) {
+          existing = {
+            'lat': (d['lat'] as num).toDouble(),
+            'lng': (d['lng'] as num).toDouble(),
+            'radiusMeters': (d['radiusMeters'] as num).toDouble(),
+          };
+        }
+      } catch (_) {}
+    }
+    final picked = await showBoundaryPicker(context,
+        accent: kDeanGold, existing: existing, title: "Set Location · $name");
+    if (picked == null) return;
+    try {
+      await AdminPresenceService.setAdminBoundary(
+        adminDocId: doc.$id,
+        lat: picked['lat'],
+        lng: picked['lng'],
+        radiusMeters: picked['radiusMeters'],
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(sheetCtx)
+            .showSnackBar(SnackBar(content: Text("Location set for $name.")));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(sheetCtx)
+            .showSnackBar(SnackBar(content: Text("Failed: $e")));
+      }
+    }
+  }
+
   void _showAdminDetails(models.Document doc) {
     final data = doc.data;
     final bool isActive = data['status'] != 'disabled';
@@ -2174,6 +2221,17 @@ class _AdminListTabState extends State<_AdminListTab> {
                     }
                   }
                 },
+              ),
+              const Divider(),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.my_location, color: kDeanGold),
+                title: const Text("Set Reporting Location",
+                    style: TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: Text(
+                    "Geofence this admin must be inside to report presence.",
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                onTap: () => _setAdminLocation(ctx, doc),
               ),
               const Divider(),
               ListTile(

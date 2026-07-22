@@ -11,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'appwrite_service.dart';
 import 'admin_hierarchy_service.dart';
+import 'notification_service.dart';
 
 /// Outcome of a "Report presence" attempt.
 class PresenceResult {
@@ -400,5 +401,91 @@ class AdminPresenceService {
       documentId: existing.$id,
       data: {'signOutTime': DateTime.now().toIso8601String()},
     );
+  }
+
+  // ── Accidental sign-out resets (3 free per week; beyond that notifies) ───
+  static const int weeklyResetAllowance = 3;
+
+  /// ISO-8601 week key like `2026-W30`, used to bucket the weekly reset count.
+  static String weekKey(DateTime d) {
+    final date = DateTime(d.year, d.month, d.day);
+    final thursday = date.add(Duration(days: 4 - date.weekday));
+    final jan1 = DateTime(thursday.year, 1, 1);
+    final firstThursday =
+        jan1.add(Duration(days: (4 - jan1.weekday + 7) % 7));
+    final weekNum =
+        1 + (thursday.difference(firstThursday).inDays / 7).round();
+    return '${thursday.year}-W${weekNum.toString().padLeft(2, '0')}';
+  }
+
+  /// How many sign-out resets [adminId] has used in the current week.
+  static Future<int> resetsUsedThisWeek(String adminId) async {
+    try {
+      final admin = await AdminHierarchyService.findUserByUsername(adminId);
+      if (admin == null) return 0;
+      final wk = admin.data['presenceResetWeek'] as String?;
+      if (wk != weekKey(DateTime.now())) return 0;
+      return (admin.data['presenceResetCount'] as int?) ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  /// Undoes today's accidental sign-out (clears `signOutTime`). Increments the
+  /// weekly reset counter; every reset beyond [weeklyResetAllowance] also
+  /// notifies the admin's higher in-charge. Returns resets-used-this-week after
+  /// this one.
+  static Future<int> resetSignOut({
+    required String adminId,
+    required String adminName,
+    required String role,
+    required int level,
+    String? parentAdminId,
+  }) async {
+    final wk = weekKey(DateTime.now());
+    final admin = await AdminHierarchyService.findUserByUsername(adminId);
+    int used = 0;
+    if (admin != null) {
+      final storedWk = admin.data['presenceResetWeek'] as String?;
+      used = (storedWk == wk)
+          ? ((admin.data['presenceResetCount'] as int?) ?? 0)
+          : 0;
+    }
+    used += 1;
+
+    if (admin != null) {
+      await AppwriteService.databases.updateDocument(
+        databaseId: _db,
+        collectionId: 'users',
+        documentId: admin.$id,
+        data: {'presenceResetWeek': wk, 'presenceResetCount': used},
+      );
+    }
+
+    // Undo today's sign-out.
+    final today = await fetchTodayLog(adminId);
+    if (today != null) {
+      await AppwriteService.databases.updateDocument(
+        databaseId: _db,
+        collectionId: logsCollection,
+        documentId: today.$id,
+        data: {'signOutTime': ''},
+      );
+    }
+
+    // Beyond the free allowance → notify the higher in-charge.
+    if (used > weeklyResetAllowance) {
+      final recipient = NotificationService.higherInchargeId(
+          role: role, level: level, parentAdminId: parentAdminId);
+      await NotificationService.create(
+        recipientId: recipient,
+        fromId: adminId,
+        fromName: adminName,
+        type: 'presence_reset',
+        message:
+            '$adminName undid a presence sign-out ($used times this week — over the $weeklyResetAllowance/week limit).',
+      );
+    }
+    return used;
   }
 }
