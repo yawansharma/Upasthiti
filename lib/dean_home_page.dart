@@ -887,22 +887,13 @@ class _DeanReportsTabState extends State<_DeanReportsTab> {
       if (bytes == null) throw Exception('Failed to encode Excel file');
 
       final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-      final savedPath = await ExportService.saveBytes(
+      await ExportService.showExportOptions(
+        context,
         bytes: Uint8List.fromList(bytes),
         fileName: 'dean_admin_report_$timestamp.xlsx',
+        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       );
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(savedPath != null
-                ? 'Saved: dean_admin_report_$timestamp.xlsx'
-                : 'Export cancelled.'),
-            backgroundColor: kDeanDark,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

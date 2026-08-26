@@ -1914,15 +1914,11 @@ class _AdminHomePageState extends State<AdminHomePage> {
     }
 
     final String csvData = const ListToCsvConverter().convert(rows);
-    final savedPath = await ExportService.saveText(
-      content: csvData,
+    await ExportService.showExportOptions(
+      context,
+      bytes: Uint8List.fromList(utf8.encode(csvData)),
       fileName: "attendance_${DateTime.now().millisecondsSinceEpoch}.csv",
     );
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(
-              savedPath != null ? "Saved to $savedPath" : "Export cancelled.")));
-    }
   }
 
   // ===========================================================================
@@ -2744,15 +2740,11 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
       ]);
     }
     final String csvData = const ListToCsvConverter().convert(rows);
-    final savedPath = await ExportService.saveText(
-      content: csvData,
+    await ExportService.showExportOptions(
+      context,
+      bytes: Uint8List.fromList(utf8.encode(csvData)),
       fileName: "${_className}_${DateTime.now().millisecondsSinceEpoch}.csv",
     );
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(
-              savedPath != null ? "Saved to $savedPath" : "Export cancelled.")));
-    }
   }
 
   @override

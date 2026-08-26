@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:csv/csv.dart';
 import 'package:excel/excel.dart' hide Border, Center;
 import 'dart:typed_data';
+import 'dart:convert';
 
 import 'app_theme.dart';
 import 'main.dart';
@@ -1196,7 +1197,6 @@ class _HRReportsTabState extends State<_HRReportsTab> {
 
       final timestamp =
           DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
-      String? savedPath;
 
       if (format == 'csv') {
         final rows = [
@@ -1224,8 +1224,9 @@ class _HRReportsTabState extends State<_HRReportsTab> {
         ];
         final csv =
             const ListToCsvConverter().convert(rows.cast<List>());
-        savedPath = await ExportService.saveText(
-          content: csv,
+        await ExportService.showExportOptions(
+          context,
+          bytes: Uint8List.fromList(utf8.encode(csv)),
           fileName: 'hr_attendance_$timestamp.csv',
         );
       } else {
@@ -1260,9 +1261,11 @@ class _HRReportsTabState extends State<_HRReportsTab> {
         }
         final bytes = excel.encode();
         if (bytes != null) {
-          savedPath = await ExportService.saveBytes(
+          await ExportService.showExportOptions(
+            context,
             bytes: Uint8List.fromList(bytes),
             fileName: 'hr_attendance_$timestamp.xlsx',
+            mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
           );
         }
       }
@@ -1270,7 +1273,7 @@ class _HRReportsTabState extends State<_HRReportsTab> {
       if (mounted) {
         setState(() {
           _exporting = false;
-          _lastExportPath = savedPath;
+          _lastExportPath = null;
         });
       }
     } catch (e) {

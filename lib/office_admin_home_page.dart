@@ -906,13 +906,13 @@ class _ReportsTabState extends State<_ReportsTab> {
       }
 
       final ts = DateTime.now().millisecondsSinceEpoch;
-      String? savedPath;
 
       if (format == 'csv') {
         const conv = ListToCsvConverter();
         final csv = conv.convert([columns, ...rows]);
-        savedPath = await ExportService.saveText(
-          content: csv,
+        await ExportService.showExportOptions(
+          context,
+          bytes: Uint8List.fromList(utf8.encode(csv)),
           fileName: 'attendance_$ts.csv',
         );
       } else if (format == 'excel') {
@@ -936,9 +936,11 @@ class _ReportsTabState extends State<_ReportsTab> {
           }
         }
         final bytes = excel.save()!;
-        savedPath = await ExportService.saveBytes(
+        await ExportService.showExportOptions(
+          context,
           bytes: Uint8List.fromList(bytes),
           fileName: 'attendance_$ts.xlsx',
+          mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         );
       } else if (format == 'pdf') {
         final pdf = pw.Document();
@@ -966,15 +968,17 @@ class _ReportsTabState extends State<_ReportsTab> {
             },
           ),
         );
-        savedPath = await ExportService.saveBytes(
+        await ExportService.showExportOptions(
+          context,
           bytes: await pdf.save(),
           fileName: 'attendance_$ts.pdf',
+          mimeType: 'application/pdf',
         );
       }
 
       if (mounted) {
         setState(() {
-          _lastSavedPath = savedPath;
+          _lastSavedPath = null;
           _exporting = false;
         });
       }
@@ -2641,15 +2645,14 @@ class _AdminsTabState extends State<_AdminsTab> {
       if (bytes == null) throw Exception('Failed to encode Excel');
 
       final ts = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-      final savedPath = await ExportService.saveBytes(
+      await ExportService.showExportOptions(
+        context,
         bytes: Uint8List.fromList(bytes),
         fileName: 'admin_activity_$ts.xlsx',
+        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       );
 
       if (mounted) Navigator.pop(context);
-      _snack(savedPath != null
-          ? 'Saved: admin_activity_$ts.xlsx'
-          : 'Export cancelled.');
     } catch (e) {
       if (mounted) Navigator.pop(context);
       _snack('Export failed: $e');
