@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:csv/csv.dart';
@@ -239,9 +240,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
   // ---------------------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
-    return PopScope(
-      canPop: false,
-      child: Scaffold(
+    return Scaffold(
       backgroundColor: const Color(0xFF101010),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
@@ -250,16 +249,10 @@ class _AdminHomePageState extends State<AdminHomePage> {
           icon: const Icon(Icons.arrow_back_ios_new,
               color: Colors.white, size: 20),
           onPressed: () {
-            if (widget.isDean) {
+            if (Navigator.canPop(context)) {
               Navigator.pop(context);
             } else {
-              // Back navigation is disabled for security — use Sign Out button.
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Please use the Sign Out button in the presence card to log out.'),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
+              SystemNavigator.pop();
             }
           },
         ),
@@ -398,8 +391,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
           ),
         ],
       ),
-    ), // Scaffold
-    ); // PopScope
+    );
   }
 
   String _tabTitle() {

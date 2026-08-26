@@ -70,19 +70,35 @@ class _OfficeAdminHomePageState extends State<OfficeAdminHomePage> {
   }
 
   void _logout() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Please use the Sign Out button in the presence card to log out.'),
-        behavior: SnackBarBehavior.floating,
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text("Logout"),
+        content: const Text("Are you sure you want to log out?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: _kOAAccent),
+            onPressed: () {
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => const LoginPage()),
+                (route) => false,
+              );
+            },
+            child: const Text("Logout", style: TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return PopScope(
-      canPop: false,
-      child: Scaffold(
+    return Scaffold(
       backgroundColor: AppTheme.kDark,
       body: SafeArea(
         bottom: false,
@@ -185,8 +201,7 @@ class _OfficeAdminHomePageState extends State<OfficeAdminHomePage> {
               label: "Audit"),
         ],
       ),
-    ), // Scaffold
-    ); // PopScope
+    );
   }
 }
 

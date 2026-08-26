@@ -113,3 +113,17 @@ __pycache__/
 node_modules/
 package.json
 package-lock.json
+
+# ============================================================
+# Environment Secrets
+# ============================================================
+.env
+.env.*
+employee-tracker-load-tests/
+final_handoff.md    
+Upasthiti_Comprehensive_Specification.docx
+Upasthiti_Platform_Overview.docx
+PROJECT_HANDOFF.md
+security_audit.md
+generate_detailed_doc.py
+generate_brochure.py
