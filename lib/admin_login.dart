@@ -6,6 +6,7 @@ import 'office_admin_home_page.dart';
 import 'event_admin_home_page.dart';
 import 'hr_admin_home_page.dart';
 import 'security_admin_home_page.dart';
+import 'admin_onboarding_page.dart';
 import 'app_theme.dart';
 import 'services/appwrite_service.dart'; // Make sure this path is correct for your project
 
@@ -47,13 +48,46 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
     }
   }
 
+  /// An admin needs first-login onboarding until it has completed it once.
+  static bool _needsOnboarding(Map<String, dynamic> data) {
+    final onboardedAt = data['presenceOnboardedAt'] as String?;
+    return onboardedAt == null || onboardedAt.isEmpty;
+  }
+
+  /// Routes to the first-login onboarding page (photo + face + boundary pin)
+  /// when [needsOnboarding], otherwise straight to [destination].
+  void _navigateAfterLogin({
+    required Widget destination,
+    required String docId,
+    required String username,
+    required String name,
+    required bool needsOnboarding,
+  }) {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => needsOnboarding
+            ? AdminOnboardingPage(
+                adminDocId: docId,
+                username: username,
+                adminName: name,
+                destination: destination,
+                accent: _roleColor,
+              )
+            : destination,
+      ),
+    );
+  }
+
   String get _badgeLabel {
     if (widget.isOfficeAdmin) return "OFFICE ADMIN";
     switch (widget.specialRole) {
       case 'eventAdmin': return "EVENT ADMIN";
       case 'hrAdmin': return "HR ADMIN";
       case 'securityAdmin': return "SECURITY ADMIN";
-      default: return "LEVEL ${widget.requiredLevel}";
+      default:
+        if (widget.requiredLevel == 1) return "INSTITUTION ADMIN";
+        return "LEVEL ${widget.requiredLevel}";
     }
   }
 
@@ -63,7 +97,9 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
       case 'eventAdmin': return "Event Admin Portal";
       case 'hrAdmin': return "HR Admin Portal";
       case 'securityAdmin': return "Security Admin Portal";
-      default: return "Level ${widget.requiredLevel} Portal";
+      default:
+        if (widget.requiredLevel == 1) return "Institution Admin Portal";
+        return "Level ${widget.requiredLevel} Portal";
     }
   }
 
@@ -71,6 +107,7 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
     if (_isSpecialRole) {
       return "${_portalTitle.replaceAll(' Portal', '')} credentials only.";
     }
+    if (widget.requiredLevel == 1) return "Institution Admin credentials only.";
     return "Only Level ${widget.requiredLevel} credentials are accepted here.";
   }
 
@@ -217,13 +254,17 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
         if (!mounted) return;
         Navigator.of(context).pop();
         final adminDepartment = data['department'] as String? ?? '';
-        Navigator.pushReplacement(context, MaterialPageRoute(
-          builder: (_) => OfficeAdminHomePage(
+        _navigateAfterLogin(
+          destination: OfficeAdminHomePage(
             adminName: adminName,
             adminId: adminId,
             adminDepartment: adminDepartment,
           ),
-        ));
+          docId: doc.$id,
+          username: adminId,
+          name: adminName,
+          needsOnboarding: _needsOnboarding(data),
+        );
       } else if (widget.specialRole != null) {
         // ── Event / HR / Security Admin ───────────────────────────────
         if (role != widget.specialRole) {
@@ -268,10 +309,16 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
           default:
             destination = SecurityAdminHomePage(adminName: adminName, adminId: adminId);
         }
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => destination));
+        _navigateAfterLogin(
+          destination: destination,
+          docId: doc.$id,
+          username: adminId,
+          name: adminName,
+          needsOnboarding: _needsOnboarding(data),
+        );
       } else {
         // RBAC Security Check
-        if (role != 'admin' && role != 'dean') {
+        if (role != 'admin') {
           _dismissAndShowError("Unauthorized access. This portal is for Administrators only.");
           _generateCaptcha();
           return;
@@ -316,13 +363,17 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
         if (!mounted) return;
         Navigator.of(context).pop();
 
-        Navigator.pushReplacement(context, MaterialPageRoute(
-          builder: (_) => AdminHomePage(
+        _navigateAfterLogin(
+          destination: AdminHomePage(
             adminName: adminName,
             adminId: adminId,
             adminLevel: accountLevel,
           ),
-        ));
+          docId: doc.$id,
+          username: adminId,
+          name: adminName,
+          needsOnboarding: _needsOnboarding(data),
+        );
       }
     } catch (e) {
       _dismissAndShowError("An unexpected error occurred: $e");

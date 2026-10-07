@@ -6,6 +6,29 @@ import 'services/appwrite_service.dart';
 import 'components/user_avatar.dart';
 import 'services/admin_hierarchy_service.dart';
 
+const _kSpecialRoles = ['officeAdmin', 'eventAdmin', 'hrAdmin', 'securityAdmin'];
+
+const _kSpecialRoleLabels = {
+  'officeAdmin': 'Office Admin',
+  'eventAdmin': 'Event Admin',
+  'hrAdmin': 'HR Admin',
+  'securityAdmin': 'Security Admin',
+};
+
+class _SpecialRoleAdmin {
+  final String id;
+  final String name;
+  final String role;
+  final String? profilePictureId;
+
+  _SpecialRoleAdmin({
+    required this.id,
+    required this.name,
+    required this.role,
+    this.profilePictureId,
+  });
+}
+
 class OrgNode {
   final String id;
   final String name;
@@ -36,6 +59,7 @@ class AdminOrgChartPage extends StatefulWidget {
 class _AdminOrgChartPageState extends State<AdminOrgChartPage> {
   bool _isLoading = true;
   List<OrgNode> _roots = [];
+  List<_SpecialRoleAdmin> _specialRoleAdmins = [];
 
   @override
   void initState() {
@@ -56,6 +80,28 @@ class _AdminOrgChartPageState extends State<AdminOrgChartPage> {
       );
       final admins = result.documents;
 
+      // 1b. Fetch cross-cutting roles separately — they have no
+      // head/supervisor relationship to nest in the tree above.
+      final specialResult = await AppwriteService.databases.listDocuments(
+        databaseId: AppwriteService.databaseId,
+        collectionId: 'users',
+        queries: [
+          Query.equal('role', _kSpecialRoles),
+          Query.limit(200),
+        ],
+      );
+      final specialRoleAdmins = specialResult.documents
+          .map((doc) => _SpecialRoleAdmin(
+                id: doc.data['username'] as String? ?? '',
+                name: doc.data['name'] as String? ??
+                    doc.data['username'] as String? ??
+                    'Admin',
+                role: doc.data['role'] as String? ?? '',
+                profilePictureId: doc.data['profilePictureId'] as String?,
+              ))
+          .where((a) => a.id.isNotEmpty)
+          .toList();
+
       // 2. Fetch all classes to determine relationships
       final classesResult = await AppwriteService.databases.listDocuments(
         databaseId: AppwriteService.databaseId,
@@ -66,12 +112,13 @@ class _AdminOrgChartPageState extends State<AdminOrgChartPage> {
       );
       final classes = classesResult.documents;
 
-      // 3. Map parent-child relationships based on classes
+      // 3. Map parent-child relationships. Legacy class-derived links first,
+      //    then let the explicit parentAdminId on each admin doc override.
       final Map<String, String> parentOf = {};
       for (final classDoc in classes) {
         final data = classDoc.data;
         final createdBy = data['createdBy'] as String? ?? '';
-        
+
         final assignments = AdminHierarchyService.readAssignments(data);
         final headAdminId = assignments.headAdminId ?? ''; // L3
         final supervisorId = assignments.supervisorId ?? ''; // L2
@@ -83,6 +130,14 @@ class _AdminOrgChartPageState extends State<AdminOrgChartPage> {
           if (headAdminId.isNotEmpty) {
             parentOf[headAdminId] = createdBy;
           }
+        }
+      }
+      // Explicit parent links (set by the Office Admin) take precedence.
+      for (final doc in admins) {
+        final id = doc.data['username'] as String? ?? '';
+        final parent = doc.data['parentAdminId'] as String?;
+        if (id.isNotEmpty && parent != null && parent.isNotEmpty) {
+          parentOf[id] = parent;
         }
       }
 
@@ -131,6 +186,7 @@ class _AdminOrgChartPageState extends State<AdminOrgChartPage> {
       if (mounted) {
         setState(() {
           _roots = roots;
+          _specialRoleAdmins = specialRoleAdmins;
           _isLoading = false;
         });
       }
@@ -169,23 +225,106 @@ class _AdminOrgChartPageState extends State<AdminOrgChartPage> {
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(35)),
                 child: _isLoading
                     ? const Center(child: CircularProgressIndicator(color: AppTheme.kGreen))
-                    : _roots.isEmpty
+                    : (_roots.isEmpty && _specialRoleAdmins.isEmpty)
                         ? _buildEmptyState()
-                        : ListView.builder(
+                        : ListView(
                             padding: const EdgeInsets.all(24),
-                            itemCount: _roots.length,
-                            itemBuilder: (context, index) => _buildNode(
-                              _roots[index], 
-                              0, 
-                              index == _roots.length - 1, 
-                              [],
-                            ),
+                            children: [
+                              if (_specialRoleAdmins.isNotEmpty) ...[
+                                _buildSpecialRolesSection(),
+                                const SizedBox(height: 28),
+                                if (_roots.isNotEmpty)
+                                  Text(
+                                    "Institution Hierarchy",
+                                    style: GoogleFonts.poppins(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                      color: Colors.black87,
+                                    ),
+                                  ),
+                                if (_roots.isNotEmpty)
+                                  const SizedBox(height: 16),
+                              ],
+                              for (int i = 0; i < _roots.length; i++)
+                                _buildNode(_roots[i], 0),
+                            ],
                           ),
               ),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildSpecialRolesSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          "Cross-Cutting Roles",
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+            color: Colors.black87,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          "Operate institution-wide, outside the standard admin hierarchy",
+          style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade600),
+        ),
+        const SizedBox(height: 14),
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: _specialRoleAdmins.map((a) {
+            final isMe = a.id == widget.currentAdminId;
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: isMe ? AppTheme.kGreen : Colors.grey.shade200,
+                  width: isMe ? 1.5 : 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 6,
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  UserAvatar(
+                    profilePictureId: a.profilePictureId,
+                    fallbackName: a.name,
+                    radius: 16,
+                  ),
+                  const SizedBox(width: 10),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(a.name,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w600, fontSize: 13)),
+                      Text(
+                        _kSpecialRoleLabels[a.role] ?? a.role,
+                        style: TextStyle(
+                            fontSize: 11, color: Colors.grey.shade600),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+        ),
+      ],
     );
   }
 
@@ -203,32 +342,11 @@ class _AdminOrgChartPageState extends State<AdminOrgChartPage> {
     );
   }
 
-  Widget _buildPrefixText(int depth, bool isLast, List<bool> isLastList) {
-    if (depth == 0) return const SizedBox.shrink();
-    String prefix = "";
-    for (int i = 0; i < depth - 1; i++) {
-      prefix += isLastList[i] ? "        " : "   â”‚    ";
-    }
-    prefix += isLast ? "   â””â”€â”€ " : "   â”œâ”€â”€ ";
-    return Padding(
-      padding: const EdgeInsets.only(top: 24),
-      child: Text(
-        prefix,
-        style: const TextStyle(
-          fontFamily: 'monospace',
-          color: Colors.grey,
-          fontSize: 18,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNode(OrgNode node, int depth, bool isLast, List<bool> isLastList) {
+  Widget _buildNode(OrgNode node, int depth) {
     final isMe = node.id == widget.currentAdminId;
-    
-    String roleLabel = "Admin";
-    Color roleColor = Colors.purple;
+
+    String roleLabel = "Institution Admin";
+    Color roleColor = const Color(0xFF6A8A73);
     if (node.level == 2) {
       roleLabel = "Head of Department";
       roleColor = const Color(0xFF4E7A8A);
@@ -240,13 +358,19 @@ class _AdminOrgChartPageState extends State<AdminOrgChartPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildPrefixText(depth, isLast, isLastList),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 12),
+        Padding(
+          // Indent each level; a small elbow connector marks nested nodes.
+          padding: EdgeInsets.only(left: depth * 22.0, bottom: 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              if (depth > 0)
+                Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: Icon(Icons.subdirectory_arrow_right,
+                      size: 18, color: Colors.grey.shade400),
+                ),
+              Expanded(
                 child: Container(
                   decoration: BoxDecoration(
                     color: isMe ? roleColor.withValues(alpha: 0.1) : Colors.white,
@@ -265,7 +389,7 @@ class _AdminOrgChartPageState extends State<AdminOrgChartPage> {
                     ],
                   ),
                   child: Padding(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(14),
                     child: Row(
                       children: [
                         UserAvatar(
@@ -275,32 +399,47 @@ class _AdminOrgChartPageState extends State<AdminOrgChartPage> {
                           backgroundColor: roleColor.withValues(alpha: 0.15),
                           foregroundColor: roleColor,
                         ),
-                        const SizedBox(width: 14),
+                        const SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
                                 node.name,
-                                style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black87),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.poppins(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 15,
+                                    color: Colors.black87),
                               ),
                               const SizedBox(height: 2),
                               Text(
                                 node.department,
-                                style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                    color: Colors.grey.shade600, fontSize: 12),
                               ),
                             ],
                           ),
                         ),
+                        const SizedBox(width: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
                             color: roleColor.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
                             roleLabel,
-                            style: TextStyle(color: roleColor, fontSize: 10, fontWeight: FontWeight.bold),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                color: roleColor,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold),
                           ),
                         ),
                       ],
@@ -308,18 +447,11 @@ class _AdminOrgChartPageState extends State<AdminOrgChartPage> {
                   ),
                 ),
               ),
-            ),
-          ],
-        ),
-        if (node.children.isNotEmpty)
-          Column(
-            children: List.generate(node.children.length, (index) {
-              final child = node.children[index];
-              final childIsLast = index == node.children.length - 1;
-              final childIsLastList = List<bool>.from(isLastList)..add(isLast);
-              return _buildNode(child, depth + 1, childIsLast, childIsLastList);
-            }),
+            ],
           ),
+        ),
+        // Recurse into children (L2 under L1, L3 under L2).
+        for (final child in node.children) _buildNode(child, depth + 1),
       ],
     );
   }

@@ -8,6 +8,7 @@ import 'app_theme.dart';
 import 'main.dart';
 import 'services/appwrite_service.dart';
 import 'components/user_avatar.dart';
+import 'components/admin_presence_card.dart';
 
 const Color _kSAAccent = Color(0xFF8A2A2A);
 final String _kDb = AppwriteService.databaseId;
@@ -39,6 +40,22 @@ class _SecurityAdminHomePageState extends State<SecurityAdminHomePage> {
         child: Column(
           children: [
             _buildHeader(context),
+            AdminPresenceCard(
+              adminId: widget.adminId,
+              adminName: widget.adminName,
+              role: 'securityAdmin',
+              level: 0,
+              department: '',
+              accent: _kSAAccent,
+              requiresLogoutVerification: true,
+              onSignedOut: () {
+                Navigator.of(context).popUntil((r) => r.isFirst);
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (_) => const LoginPage()),
+                );
+              },
+            ),
             Expanded(
               child: Container(
                 width: double.infinity,
@@ -124,14 +141,11 @@ class _SecurityAdminHomePageState extends State<SecurityAdminHomePage> {
               ),
             ),
           ),
-          const SizedBox(width: 8),
-          IconButton(
+          TextButton.icon(
             onPressed: () => _confirmLogout(context),
-            icon: const Icon(Icons.logout,
-                color: Colors.white70, size: 20),
-            tooltip: "Logout",
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
+            icon: const Icon(Icons.logout, color: Colors.white70, size: 18),
+            label: const Text("Logout",
+                style: TextStyle(color: Colors.white70, fontSize: 13)),
           ),
         ],
       ),
@@ -193,8 +207,7 @@ class _SecurityAdminHomePageState extends State<SecurityAdminHomePage> {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text("Logout"),
         content: const Text("Are you sure you want to log out?"),
         actions: [
@@ -203,8 +216,7 @@ class _SecurityAdminHomePageState extends State<SecurityAdminHomePage> {
             child: const Text("Cancel"),
           ),
           ElevatedButton(
-            style:
-                ElevatedButton.styleFrom(backgroundColor: _kSAAccent),
+            style: ElevatedButton.styleFrom(backgroundColor: _kSAAccent),
             onPressed: () {
               Navigator.of(context).popUntil((r) => r.isFirst);
               Navigator.pushReplacement(
@@ -212,8 +224,7 @@ class _SecurityAdminHomePageState extends State<SecurityAdminHomePage> {
                 MaterialPageRoute(builder: (_) => const LoginPage()),
               );
             },
-            child: const Text("Logout",
-                style: TextStyle(color: Colors.white)),
+            child: const Text("Logout", style: TextStyle(color: Colors.white)),
           ),
         ],
       ),

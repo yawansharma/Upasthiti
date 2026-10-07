@@ -35,9 +35,16 @@ class ClassDetailPage extends StatefulWidget {
 
 class _ClassDetailPageState extends State<ClassDetailPage> {
   bool _isReporting = false;
+  String? _lastUploadError;
+
+  bool get _hasBoundary =>
+      widget.boundary != null &&
+      widget.boundary!['lat'] != null &&
+      widget.boundary!['lng'] != null &&
+      widget.boundary!['radiusMeters'] != null;
 
   Future<bool> _checkGeofence() async {
-    if (widget.boundary == null) return true;
+    if (!_hasBoundary) return true;
 
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) return false;
@@ -123,7 +130,7 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
     try {
       final fileId = ID.unique();
       final file = await AppwriteService.storage.createFile(
-        bucketId: 'attendance_photos',
+        bucketId: AppwriteService.attendancePhotosBucket,
         fileId: fileId,
         file: InputFile.fromPath(
           path: photo.path,
@@ -131,9 +138,10 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
               '${widget.username}_${DateTime.now().millisecondsSinceEpoch}.jpg',
         ),
       );
-
-      return "${AppwriteService.endpoint}/storage/buckets/attendance_photos/files/${file.$id}/view?project=${AppwriteService.projectId}";
-    } catch (_) {
+      _lastUploadError = null;
+      return "${AppwriteService.endpoint}/storage/buckets/${AppwriteService.attendancePhotosBucket}/files/${file.$id}/view?project=${AppwriteService.projectId}";
+    } catch (e) {
+      _lastUploadError = e.toString();
       return null;
     }
   }
@@ -160,7 +168,7 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
   Future<void> _reportAttendance(Map<String, dynamic> activePeriod) async {
     if (_isReporting) return;
 
-    if (widget.boundary != null) {
+    if (_hasBoundary) {
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled && mounted) {
         await showDialog<void>(
@@ -207,16 +215,20 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
       _showProgressDialog(statusNotifier);
 
       bool isWithinGeofence = false;
+      bool geofenceCheckErrored = false;
       try {
         isWithinGeofence = await _checkGeofence();
       } catch (_) {
         isWithinGeofence = false;
+        geofenceCheckErrored = true;
       }
 
-      if (widget.boundary != null && !isWithinGeofence) {
+      if (_hasBoundary && !isWithinGeofence) {
         if (mounted) Navigator.of(context).pop();
         _showSnackBar(
-          "You are outside the class boundary. Move closer and try again.",
+          geofenceCheckErrored
+              ? "Couldn't verify your location. Check GPS/location permissions and try again."
+              : "You are outside the class boundary. Move closer and try again.",
         );
         setState(() => _isReporting = false);
         return;
@@ -302,6 +314,10 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
       if (mounted) {
         Navigator.of(context).pop();
         setState(() {}); // Refresh the FutureBuilders
+        if (photoUrl == null) {
+          _showSnackBar(
+              "Attendance saved, but photo upload failed: ${_lastUploadError ?? 'unknown error'}");
+        }
         _showSuccessTicket(isWithinGeofence, entryStatus, activePeriod);
       }
     } catch (e) {

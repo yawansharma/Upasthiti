@@ -95,8 +95,6 @@ Manage registrations.
 
 Verify participant attendance.
 
-Generate event certificates.
-
 Track event participation.
 
 

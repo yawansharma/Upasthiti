@@ -110,8 +110,27 @@ class DistributionService {
     );
   }
 
-  static Future<void> activateEvent(String eventId) {
-    return AppwriteService.databases.updateDocument(
+  /// Thrown when a caller who is neither the event's creator nor the Dean
+  /// tries to manage it.
+  static Future<void> _requireOwner({
+    required String eventId,
+    required String callerId,
+    required bool isDean,
+  }) async {
+    if (isDean) return;
+    final event = await getEventById(eventId);
+    if (event.data['createdBy'] != callerId) {
+      throw Exception('Only the event creator or the Dean can do this.');
+    }
+  }
+
+  static Future<void> activateEvent(
+    String eventId, {
+    required String callerId,
+    bool isDean = false,
+  }) async {
+    await _requireOwner(eventId: eventId, callerId: callerId, isDean: isDean);
+    await AppwriteService.databases.updateDocument(
       databaseId: _db,
       collectionId: _events,
       documentId: eventId,
@@ -119,8 +138,13 @@ class DistributionService {
     );
   }
 
-  static Future<void> closeEvent(String eventId) {
-    return AppwriteService.databases.updateDocument(
+  static Future<void> closeEvent(
+    String eventId, {
+    required String callerId,
+    bool isDean = false,
+  }) async {
+    await _requireOwner(eventId: eventId, callerId: callerId, isDean: isDean);
+    await AppwriteService.databases.updateDocument(
       databaseId: _db,
       collectionId: _events,
       documentId: eventId,
@@ -136,8 +160,11 @@ class DistributionService {
     required String eventId,
     required String userId,
     required String userName,
+    required String callerId,
+    bool isDean = false,
     String? packageNote,
   }) async {
+    await _requireOwner(eventId: eventId, callerId: callerId, isDean: isDean);
     final existing = await AppwriteService.databases.listDocuments(
       databaseId: _db,
       collectionId: _recipients,
@@ -179,8 +206,11 @@ class DistributionService {
 
   static Future<void> removeRecipient(
     String recipientDocId,
-    String eventId,
-  ) async {
+    String eventId, {
+    required String callerId,
+    bool isDean = false,
+  }) async {
+    await _requireOwner(eventId: eventId, callerId: callerId, isDean: isDean);
     await AppwriteService.databases.deleteDocument(
       databaseId: _db,
       collectionId: _recipients,
@@ -205,7 +235,13 @@ class DistributionService {
     required String adminId,
     required String adminName,
     required String assignedBy,
+    bool isDean = false,
   }) async {
+    await _requireOwner(
+      eventId: eventId,
+      callerId: assignedBy,
+      isDean: isDean,
+    );
     final existing = await AppwriteService.databases.listDocuments(
       databaseId: _db,
       collectionId: _assignments,
@@ -238,8 +274,22 @@ class DistributionService {
     );
   }
 
-  static Future<void> revokeAdmin(String assignmentDocId) {
-    return AppwriteService.databases.updateDocument(
+  static Future<void> revokeAdmin(
+    String assignmentDocId, {
+    required String callerId,
+    bool isDean = false,
+  }) async {
+    final assignment = await AppwriteService.databases.getDocument(
+      databaseId: _db,
+      collectionId: _assignments,
+      documentId: assignmentDocId,
+    );
+    await _requireOwner(
+      eventId: assignment.data['eventId'] as String,
+      callerId: callerId,
+      isDean: isDean,
+    );
+    await AppwriteService.databases.updateDocument(
       databaseId: _db,
       collectionId: _assignments,
       documentId: assignmentDocId,

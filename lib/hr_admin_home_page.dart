@@ -5,15 +5,17 @@ import 'package:appwrite/models.dart' as models;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:csv/csv.dart';
-import 'package:excel/excel.dart' hide Border;
-import 'package:path_provider/path_provider.dart';
-import 'dart:io';
+import 'package:excel/excel.dart' hide Border, Center;
+import 'dart:typed_data';
+import 'dart:convert';
 
 import 'app_theme.dart';
 import 'main.dart';
 import 'services/appwrite_service.dart';
 import 'services/leave_service.dart';
+import 'services/export_service.dart';
 import 'components/user_avatar.dart';
+import 'components/admin_presence_card.dart';
 
 const Color _kHRAccent = Color(0xFF8A7A2A);
 final String _kDb = AppwriteService.databaseId;
@@ -46,6 +48,22 @@ class _HrAdminHomePageState extends State<HrAdminHomePage> {
         child: Column(
           children: [
             _buildHeader(context),
+            AdminPresenceCard(
+              adminId: widget.adminId,
+              adminName: widget.adminName,
+              role: 'hrAdmin',
+              level: 0,
+              department: widget.adminDepartment,
+              accent: _kHRAccent,
+              requiresLogoutVerification: true,
+              onSignedOut: () {
+                Navigator.of(context).popUntil((r) => r.isFirst);
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (_) => const LoginPage()),
+                );
+              },
+            ),
             Expanded(
               child: Container(
                 width: double.infinity,
@@ -62,11 +80,14 @@ class _HrAdminHomePageState extends State<HrAdminHomePage> {
                           children: [
                             _HRDashboardTab(
                                 adminId: widget.adminId,
-                                adminDepartment: widget.adminDepartment),
+                                adminDepartment: widget.adminDepartment,
+                                onNavigate: (i) => setState(() => _tabIndex = i)),
                             _HRApprovalsTab(
                                 adminId: widget.adminId,
                                 adminDepartment: widget.adminDepartment),
-                            _HRLeaveTab(adminId: widget.adminId),
+                            _HRLeaveTab(
+                                adminId: widget.adminId,
+                                adminName: widget.adminName),
                             _HRReportsTab(
                                 adminId: widget.adminId,
                                 adminDepartment: widget.adminDepartment),
@@ -139,14 +160,11 @@ class _HrAdminHomePageState extends State<HrAdminHomePage> {
               ),
             ),
           ),
-          const SizedBox(width: 8),
-          IconButton(
+          TextButton.icon(
             onPressed: () => _confirmLogout(context),
-            icon: const Icon(Icons.logout,
-                color: Colors.white70, size: 20),
-            tooltip: "Logout",
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
+            icon: const Icon(Icons.logout, color: Colors.white70, size: 18),
+            label: const Text("Logout",
+                style: TextStyle(color: Colors.white70, fontSize: 13)),
           ),
         ],
       ),
@@ -209,8 +227,7 @@ class _HrAdminHomePageState extends State<HrAdminHomePage> {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text("Logout"),
         content: const Text("Are you sure you want to log out?"),
         actions: [
@@ -219,8 +236,7 @@ class _HrAdminHomePageState extends State<HrAdminHomePage> {
             child: const Text("Cancel"),
           ),
           ElevatedButton(
-            style:
-                ElevatedButton.styleFrom(backgroundColor: _kHRAccent),
+            style: ElevatedButton.styleFrom(backgroundColor: _kHRAccent),
             onPressed: () {
               Navigator.of(context).popUntil((r) => r.isFirst);
               Navigator.pushReplacement(
@@ -228,8 +244,7 @@ class _HrAdminHomePageState extends State<HrAdminHomePage> {
                 MaterialPageRoute(builder: (_) => const LoginPage()),
               );
             },
-            child: const Text("Logout",
-                style: TextStyle(color: Colors.white)),
+            child: const Text("Logout", style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -244,9 +259,12 @@ class _HrAdminHomePageState extends State<HrAdminHomePage> {
 class _HRDashboardTab extends StatefulWidget {
   final String adminId;
   final String adminDepartment;
+  final ValueChanged<int> onNavigate;
 
   const _HRDashboardTab(
-      {required this.adminId, required this.adminDepartment});
+      {required this.adminId,
+      required this.adminDepartment,
+      required this.onNavigate});
 
   @override
   State<_HRDashboardTab> createState() => _HRDashboardTabState();
@@ -366,6 +384,7 @@ class _HRDashboardTabState extends State<_HRDashboardTab> {
             "Review Leave Requests",
             "Approve or reject pending leave requests",
             Colors.orange.shade600,
+            onTap: () => widget.onNavigate(2),
           ),
           const SizedBox(height: 10),
           _actionCard(
@@ -373,6 +392,7 @@ class _HRDashboardTabState extends State<_HRDashboardTab> {
             "Student Registrations",
             "Approve new student registration requests",
             Colors.blue.shade600,
+            onTap: () => widget.onNavigate(1),
           ),
         ],
       ),
@@ -449,8 +469,12 @@ class _HRDashboardTabState extends State<_HRDashboardTab> {
   }
 
   Widget _actionCard(
-      IconData icon, String title, String subtitle, Color color) {
-    return Container(
+      IconData icon, String title, String subtitle, Color color,
+      {required VoidCallback onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -487,6 +511,7 @@ class _HRDashboardTabState extends State<_HRDashboardTab> {
           Icon(Icons.arrow_forward_ios_rounded,
               size: 14, color: Colors.grey.shade400),
         ],
+      ),
       ),
     );
   }
@@ -775,7 +800,8 @@ class _HRApprovalsTabState extends State<_HRApprovalsTab> {
 
 class _HRLeaveTab extends StatefulWidget {
   final String adminId;
-  const _HRLeaveTab({required this.adminId});
+  final String adminName;
+  const _HRLeaveTab({required this.adminId, required this.adminName});
 
   @override
   State<_HRLeaveTab> createState() => _HRLeaveTabState();
@@ -820,7 +846,12 @@ class _HRLeaveTabState extends State<_HRLeaveTab> {
 
   Future<void> _updateStatus(models.Document doc, String status) async {
     try {
-      await LeaveService.updateStatus(doc.$id, status, widget.adminId);
+      await LeaveService.updateStatus(
+        doc.$id,
+        status,
+        widget.adminName,
+        actionById: widget.adminId,
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Leave request $status.')));
@@ -828,8 +859,10 @@ class _HRLeaveTabState extends State<_HRLeaveTab> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content:
+                Text(e.toString().replaceFirst('Exception: ', ''))));
+        _fetchLeaves();
       }
     }
   }
@@ -909,6 +942,13 @@ class _HRLeaveTabState extends State<_HRLeaveTab> {
     final userName = d['userName'] as String? ?? d['userId'] as String? ?? '—';
     final reason = d['reason'] as String? ?? '';
     final isPending = status == 'pending';
+    // Mirror LeaveService.updateStatus's own authorization rule: only an
+    // unassigned request or one explicitly routed to this HR admin can
+    // actually be actioned here. Everything else is view-only.
+    final approverId = d['approverId'] as String?;
+    final canAct = approverId == null ||
+        approverId.isEmpty ||
+        approverId == widget.adminId;
 
     String dateRange = '—';
     try {
@@ -1002,7 +1042,22 @@ class _HRLeaveTabState extends State<_HRLeaveTab> {
               overflow: TextOverflow.ellipsis,
             ),
           ],
-          if (isPending) ...[
+          if (isPending && !canAct) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Icon(Icons.info_outline, size: 13, color: Colors.grey.shade500),
+                const SizedBox(width: 5),
+                Expanded(
+                  child: Text(
+                    "Routed to another approver — view only.",
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (isPending && canAct) ...[
             const SizedBox(height: 12),
             Row(
               children: [
@@ -1140,10 +1195,8 @@ class _HRReportsTabState extends State<_HRReportsTab> {
         queries: queries,
       );
 
-      final dir = await getApplicationDocumentsDirectory();
       final timestamp =
           DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
-      String filePath;
 
       if (format == 'csv') {
         final rows = [
@@ -1171,8 +1224,11 @@ class _HRReportsTabState extends State<_HRReportsTab> {
         ];
         final csv =
             const ListToCsvConverter().convert(rows.cast<List>());
-        filePath = '${dir.path}/hr_attendance_$timestamp.csv';
-        await File(filePath).writeAsString(csv);
+        await ExportService.showExportOptions(
+          context,
+          bytes: Uint8List.fromList(utf8.encode(csv)),
+          fileName: 'hr_attendance_$timestamp.csv',
+        );
       } else {
         final excel = Excel.createExcel();
         final sheet = excel['Attendance'];
@@ -1203,17 +1259,21 @@ class _HRReportsTabState extends State<_HRReportsTab> {
             TextCellValue(d['timestamp']?.toString() ?? ''),
           ]);
         }
-        filePath = '${dir.path}/hr_attendance_$timestamp.xlsx';
         final bytes = excel.encode();
         if (bytes != null) {
-          await File(filePath).writeAsBytes(bytes);
+          await ExportService.showExportOptions(
+            context,
+            bytes: Uint8List.fromList(bytes),
+            fileName: 'hr_attendance_$timestamp.xlsx',
+            mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          );
         }
       }
 
       if (mounted) {
         setState(() {
           _exporting = false;
-          _lastExportPath = filePath;
+          _lastExportPath = null;
         });
       }
     } catch (e) {

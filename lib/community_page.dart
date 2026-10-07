@@ -143,8 +143,9 @@ class _ChatViewState extends State<_ChatView> {
   void initState() {
     super.initState();
     _fetchMessages();
-    _sub = AppwriteService.realtime.subscribe(
-        ['databases.main_db.collections.community_messages.documents']);
+    _sub = AppwriteService.realtime.subscribe([
+      'databases.${AppwriteService.databaseId}.collections.community_messages.documents'
+    ]);
     _sub!.stream.listen((event) {
       final payload = event.payload;
       if (payload['classId'] == widget.classId &&

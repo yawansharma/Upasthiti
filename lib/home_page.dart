@@ -13,6 +13,7 @@ import 'services/appwrite_service.dart';
 import 'distribution/user_qr_page.dart';
 import 'services/admin_hierarchy_service.dart';
 import 'components/user_avatar.dart';
+import 'leave_request_page.dart';
 
 class HomePage extends StatefulWidget {
   final String name;
@@ -433,7 +434,9 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      child: Scaffold(
       backgroundColor: AppTheme.kDark,
       appBar: AppBar(
         title: const Text("Dashboard"),
@@ -459,6 +462,20 @@ class _HomePageState extends State<HomePage> {
                 builder: (_) => UserQrPage(
                   username: widget.username,
                   name: widget.name,
+                ),
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.event_busy_outlined),
+            tooltip: "Request Leave",
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => LeaveRequestPage(
+                  userId: widget.username,
+                  userName: widget.name,
+                  isStudent: true,
                 ),
               ),
             ),
@@ -514,7 +531,8 @@ class _HomePageState extends State<HomePage> {
           ),
         ],
       ),
-    );
+    ), // Scaffold
+    ); // PopScope
   }
 
   Widget _buildContent(BuildContext context) {

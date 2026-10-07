@@ -14,6 +14,7 @@ class LeaveService {
     required DateTime endDate,
     required String reason,
     required int approverLevel,
+    String? approverId,
   }) async {
     return await AppwriteService.databases.createDocument(
       databaseId: databaseId,
@@ -28,13 +29,21 @@ class LeaveService {
         'reason': reason,
         'status': 'pending',
         'approverLevel': approverLevel,
+        if (approverId != null) 'approverId': approverId,
         'createdAt': DateTime.now().toIso8601String(),
       },
     );
   }
 
-  static Future<models.DocumentList> getPendingRequests(int level) async {
-    return await AppwriteService.databases.listDocuments(
+  /// Pending requests at [level]. When [approverId] is given, results are
+  /// narrowed to requests routed to that specific admin — requests submitted
+  /// before approver-scoping shipped (no `approverId` stored) still show to
+  /// anyone at the right level, so older pending requests aren't orphaned.
+  static Future<List<models.Document>> getPendingRequests(
+    int level, {
+    String? approverId,
+  }) async {
+    final result = await AppwriteService.databases.listDocuments(
       databaseId: databaseId,
       collectionId: collectionId,
       queries: [
@@ -43,6 +52,13 @@ class LeaveService {
         Query.orderDesc('createdAt'),
       ],
     );
+    if (approverId == null) return result.documents;
+    return result.documents.where((doc) {
+      final docApproverId = doc.data['approverId'] as String?;
+      return docApproverId == null ||
+          docApproverId.isEmpty ||
+          docApproverId == approverId;
+    }).toList();
   }
 
   static Future<models.DocumentList> getMyRequests(String userId) async {
@@ -56,7 +72,26 @@ class LeaveService {
     );
   }
 
-  static Future<void> updateStatus(String documentId, String status, String actionBy, {String? comment}) async {
+  /// [actionById] is the acting admin's own username, checked against the
+  /// request's resolved `approverId` (if any). [actionBy] is kept separate
+  /// as the human-readable name recorded on the request.
+  static Future<void> updateStatus(
+    String documentId,
+    String status,
+    String actionBy, {
+    required String actionById,
+    String? comment,
+  }) async {
+    final doc = await AppwriteService.databases.getDocument(
+      databaseId: databaseId,
+      collectionId: collectionId,
+      documentId: documentId,
+    );
+    final approverId = doc.data['approverId'] as String?;
+    if (approverId != null && approverId.isNotEmpty && approverId != actionById) {
+      throw Exception('You are not the approver for this request.');
+    }
+
     await AppwriteService.databases.updateDocument(
       databaseId: databaseId,
       collectionId: collectionId,

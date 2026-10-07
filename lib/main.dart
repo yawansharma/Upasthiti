@@ -221,9 +221,7 @@ class _LoginPageState extends State<LoginPage> {
       final response = await AppwriteService.databases.listDocuments(
         databaseId: AppwriteService.databaseId,
         collectionId: 'users',
-        queries: [
-          Query.equal('username', uniqueCode),
-        ],
+        queries: [Query.equal('username', uniqueCode)],
       );
 
       if (response.documents.isEmpty) {
@@ -232,7 +230,8 @@ class _LoginPageState extends State<LoginPage> {
       }
 
       // Dual-mode password verification (supports plaintext legacy + hashed)
-      final storedPassword = response.documents.first.data['password'] as String? ?? '';
+      final storedPassword =
+          response.documents.first.data['password'] as String? ?? '';
       if (!AppwriteService.verifyPassword(password, storedPassword)) {
         _dismissDialogAndShow(statusText, "Invalid credentials.");
         return;
@@ -316,15 +315,16 @@ class _LoginPageState extends State<LoginPage> {
           builder: (context, constraints) {
             return SingleChildScrollView(
               child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  minHeight: constraints.maxHeight,
-                ),
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
                 child: IntrinsicHeight(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 20,
+                        ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -343,7 +343,9 @@ class _LoginPageState extends State<LoginPage> {
                             TextButton.icon(
                               onPressed: () => Navigator.push(
                                 context,
-                                MaterialPageRoute(builder: (_) => const AdminLevelSelectPage()),
+                                MaterialPageRoute(
+                                  builder: (_) => const AdminLevelSelectPage(),
+                                ),
                               ),
                               icon: const Icon(
                                 Icons.admin_panel_settings_outlined,
@@ -411,8 +413,9 @@ class _LoginPageState extends State<LoginPage> {
                                         color: Colors.grey,
                                         size: 20,
                                       ),
-                                      onPressed: () =>
-                                          setState(() => _isObscure = !_isObscure),
+                                      onPressed: () => setState(
+                                        () => _isObscure = !_isObscure,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -424,7 +427,8 @@ class _LoginPageState extends State<LoginPage> {
                                       Navigator.push(
                                         context,
                                         MaterialPageRoute(
-                                          builder: (_) => const ForgotPasswordPage(),
+                                          builder: (_) =>
+                                              const ForgotPasswordPage(),
                                         ),
                                       );
                                     },
@@ -546,17 +550,22 @@ class _LoginPageState extends State<LoginPage> {
                                         Navigator.push(
                                           context,
                                           MaterialPageRoute(
-                                            builder: (_) => const DeanLoginPage(),
+                                            builder: (_) =>
+                                                const DeanLoginPage(),
                                           ),
                                         );
                                       },
                                       style: ElevatedButton.styleFrom(
-                                        backgroundColor: const Color(0xFF1A1C29),
+                                        backgroundColor: const Color(
+                                          0xFF1A1C29,
+                                        ),
                                         foregroundColor: const Color(
                                           0xFFD4AF37,
                                         ),
                                         shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(12),
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
                                         ),
                                         padding: const EdgeInsets.symmetric(
                                           horizontal: 20,
@@ -566,7 +575,9 @@ class _LoginPageState extends State<LoginPage> {
                                       icon: const Icon(Icons.shield, size: 16),
                                       label: const Text(
                                         "Super Admin Portal",
-                                        style: TextStyle(fontWeight: FontWeight.bold),
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -587,4 +598,3 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 }
-

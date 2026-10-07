@@ -110,7 +110,7 @@ class AdminLevelSelectPage extends StatelessWidget {
                         // Level Cards
                         _LevelCard(
                           level: 1,
-                          title: "Admin",
+                          title: "Institution Admin",
                           subtitle: "Institution-level control",
                           description:
                               "Full institutional oversight, approve Level 2 leave requests, and cross-department reporting.",

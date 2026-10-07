@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'app_theme.dart';
 import 'main.dart';
+import 'components/admin_presence_card.dart';
 import 'distribution/admin_distribution_tab.dart';
 
 const Color _kEAAccent = Color(0xFF3D6B8A);
@@ -17,39 +18,37 @@ class EventAdminHomePage extends StatelessWidget {
     required this.adminId,
   });
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.kDark,
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            _buildHeader(context),
-            Expanded(
-              child: Container(
-                width: double.infinity,
-                decoration: AppTheme.bottomSheet,
-                child: ClipRRect(
-                  borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(35)),
-                  child: AdminDistributionTab(
-                    adminId: adminId,
-                    adminName: adminName,
-                    canHostEvents: true,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
+  void _confirmLogout(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text("Logout"),
+        content: const Text("Are you sure you want to log out?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: _kEAAccent),
+            onPressed: () {
+              Navigator.of(context).popUntil((r) => r.isFirst);
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (_) => const LoginPage()),
+              );
+            },
+            child: const Text("Logout", style: TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildHeader(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
       child: Row(
         children: [
           Container(
@@ -59,8 +58,7 @@ class EventAdminHomePage extends StatelessWidget {
               color: _kEAAccent.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.event_outlined,
-                color: Colors.white, size: 22),
+            child: const Icon(Icons.event_outlined, color: Colors.white, size: 22),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -82,63 +80,58 @@ class EventAdminHomePage extends StatelessWidget {
               ],
             ),
           ),
-          Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: _kEAAccent.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(20),
-              border:
-                  Border.all(color: _kEAAccent.withValues(alpha: 0.3)),
-            ),
-            child: const Text(
-              "EA",
-              style: TextStyle(
-                color: _kEAAccent,
-                fontWeight: FontWeight.bold,
-                fontSize: 11,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          IconButton(
+          TextButton.icon(
             onPressed: () => _confirmLogout(context),
-            icon: const Icon(Icons.logout, color: Colors.white70, size: 20),
-            tooltip: "Logout",
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
+            icon: const Icon(Icons.logout, color: Colors.white70, size: 18),
+            label: const Text("Logout",
+                style: TextStyle(color: Colors.white70, fontSize: 13)),
           ),
         ],
       ),
     );
   }
 
-  void _confirmLogout(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text("Logout"),
-        content: const Text("Are you sure you want to log out?"),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: _kEAAccent),
-            onPressed: () {
-              Navigator.of(context).popUntil((r) => r.isFirst);
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (_) => const LoginPage()),
-              );
-            },
-            child: const Text("Logout",
-                style: TextStyle(color: Colors.white)),
-          ),
-        ],
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppTheme.kDark,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            _buildHeader(context),
+            AdminPresenceCard(
+              adminId: adminId,
+              adminName: adminName,
+              role: 'eventAdmin',
+              level: 0,
+              department: '',
+              accent: _kEAAccent,
+              onSignedOut: () {
+                Navigator.of(context).popUntil((r) => r.isFirst);
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (_) => const LoginPage()),
+                );
+              },
+            ),
+            Expanded(
+              child: Container(
+                width: double.infinity,
+                decoration: AppTheme.bottomSheet,
+                child: ClipRRect(
+                  borderRadius:
+                      const BorderRadius.vertical(top: Radius.circular(35)),
+                  child: AdminDistributionTab(
+                    adminId: adminId,
+                    adminName: adminName,
+                    canHostEvents: true,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
