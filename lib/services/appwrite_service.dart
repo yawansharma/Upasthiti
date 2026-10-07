@@ -3,11 +3,11 @@ import 'package:appwrite/appwrite.dart';
 import 'package:crypto/crypto.dart';
 
 class AppwriteService {
-  static const String endpoint = 'https://sgp.cloud.appwrite.io/v1';
-  static const String projectId = '6a2c0bd800121a164e77';
+  static const String endpoint = 'https://fra.cloud.appwrite.io/v1';
+  static const String projectId = '6ac4f7a50037e9fe4dfa';
 
   // ── Centralized IDs ───────────────────────────────────────────────────────
-  static const String databaseId = '6a2c10dc000d5e50f314';
+  static const String databaseId = '6ac510390009fba397c7';
   static const String profileBucketId = '6a2c12a500260c940843';
   static const String attendancePhotosBucket = 'attendance_photos';
   static const String communityFilesBucket = 'community_files';

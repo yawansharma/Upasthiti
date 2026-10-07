@@ -87,17 +87,6 @@ class _AdminLoginPageState extends State<AdminLoginPage>
   String get _badgeLabel {
     if (widget.isOfficeAdmin) return "OFFICE ADMIN";
     switch (widget.specialRole) {
-<<<<<<< Updated upstream
-      case 'eventAdmin': return "EVENT ADMIN";
-      case 'hrAdmin': return "HR ADMIN";
-      case 'securityAdmin': return "SECURITY ADMIN";
-<<<<<<< Updated upstream
-      default:
-        if (widget.requiredLevel == 1) return "INSTITUTION ADMIN";
-        return "LEVEL ${widget.requiredLevel}";
-=======
-      default: return "LEVEL ${widget.requiredLevel}";
-=======
       case 'eventAdmin':
         return "EVENT ADMIN";
       case 'hrAdmin':
@@ -107,25 +96,12 @@ class _AdminLoginPageState extends State<AdminLoginPage>
       default:
         if (widget.requiredLevel == 1) return "INSTITUTION ADMIN";
         return "LEVEL ${widget.requiredLevel}";
->>>>>>> Stashed changes
->>>>>>> Stashed changes
     }
   }
 
   String get _portalTitle {
     if (widget.isOfficeAdmin) return "Office Admin Portal";
     switch (widget.specialRole) {
-<<<<<<< Updated upstream
-      case 'eventAdmin': return "Event Admin Portal";
-      case 'hrAdmin': return "HR Admin Portal";
-      case 'securityAdmin': return "Security Admin Portal";
-<<<<<<< Updated upstream
-      default:
-        if (widget.requiredLevel == 1) return "Institution Admin Portal";
-        return "Level ${widget.requiredLevel} Portal";
-=======
-      default: return "Level ${widget.requiredLevel} Portal";
-=======
       case 'eventAdmin':
         return "Event Admin Portal";
       case 'hrAdmin':
@@ -135,8 +111,6 @@ class _AdminLoginPageState extends State<AdminLoginPage>
       default:
         if (widget.requiredLevel == 1) return "Institution Admin Portal";
         return "Level ${widget.requiredLevel} Portal";
->>>>>>> Stashed changes
->>>>>>> Stashed changes
     }
   }
 
@@ -244,25 +218,45 @@ class _AdminLoginPageState extends State<AdminLoginPage>
     );
 
     try {
-      // Use the new Appwrite Auth flow with migration
-      final result = await AppwriteService.loginWithMigration(adminId, password);
-      final docId = result['docId'] as String;
-      final data = result['data'] as Map<String, dynamic>;
-      
+      // Query by username only — password verified client-side for dual-mode support
+      final query = await AppwriteService.databases.listDocuments(
+        databaseId: AppwriteService.databaseId,
+        collectionId: 'users',
+        queries: [Query.equal('username', adminId)],
+      );
+
+      if (query.documents.isEmpty) {
+        _dismissAndShowError("Invalid Admin ID or Password");
+        _generateCaptcha();
+        return;
+      }
+
+      final doc = query.documents.first;
+      final data = doc.data;
+
+      // Dual-mode password verification (supports plaintext legacy + hashed)
       final storedPassword = data['password'] as String? ?? '';
+      if (!AppwriteService.verifyPassword(password, storedPassword)) {
+        _dismissAndShowError("Invalid Admin ID or Password");
+        _generateCaptcha();
+        return;
+      }
+
       final role = data['role'] as String?;
       final adminName = data['name'] ?? adminId;
 
       if (widget.isOfficeAdmin) {
         if (role != 'officeAdmin') {
-          await AppwriteService.logout();
-          _dismissAndShowError("Unauthorized. This portal is for Office Admins only.");
+          _dismissAndShowError(
+            "Unauthorized. This portal is for Office Admins only.",
+          );
           _generateCaptcha();
           return;
         }
         if (data['status'] == 'disabled') {
-          await AppwriteService.logout();
-          _dismissAndShowError("Your account has been disabled. Please contact administration.");
+          _dismissAndShowError(
+            "Your account has been disabled. Please contact administration.",
+          );
           _generateCaptcha();
           return;
         }
@@ -277,12 +271,12 @@ class _AdminLoginPageState extends State<AdminLoginPage>
         await AppwriteService.databases.updateDocument(
           databaseId: AppwriteService.databaseId,
           collectionId: 'users',
-          documentId: docId,
+          documentId: doc.$id,
           data: updateData,
         );
         // Trigger lazy background cleanup of old accounts
         AppwriteService.cleanupInactiveAccounts();
-        
+
         if (!mounted) return;
         Navigator.of(context).pop();
         final adminDepartment = data['department'] as String? ?? '';
@@ -292,33 +286,24 @@ class _AdminLoginPageState extends State<AdminLoginPage>
             adminId: adminId,
             adminDepartment: adminDepartment,
           ),
-<<<<<<< Updated upstream
           docId: doc.$id,
-=======
-<<<<<<< Updated upstream
-        ));
-=======
-          docId: docId,
->>>>>>> Stashed changes
           username: adminId,
           name: adminName,
           needsOnboarding: _needsOnboarding(data),
         );
-<<<<<<< Updated upstream
-=======
->>>>>>> Stashed changes
->>>>>>> Stashed changes
       } else if (widget.specialRole != null) {
         // ── Event / HR / Security Admin ───────────────────────────────
         if (role != widget.specialRole) {
-          await AppwriteService.logout();
-          _dismissAndShowError("Unauthorized. This portal is for ${_portalTitle.replaceAll(' Portal', '')}s only.");
+          _dismissAndShowError(
+            "Unauthorized. This portal is for ${_portalTitle.replaceAll(' Portal', '')}s only.",
+          );
           _generateCaptcha();
           return;
         }
         if (data['status'] == 'disabled') {
-          await AppwriteService.logout();
-          _dismissAndShowError("Your account has been disabled. Please contact administration.");
+          _dismissAndShowError(
+            "Your account has been disabled. Please contact administration.",
+          );
           _generateCaptcha();
           return;
         }
@@ -333,28 +318,37 @@ class _AdminLoginPageState extends State<AdminLoginPage>
         await AppwriteService.databases.updateDocument(
           databaseId: AppwriteService.databaseId,
           collectionId: 'users',
-          documentId: docId,
+          documentId: doc.$id,
           data: updateData2,
         );
         // Trigger lazy background cleanup of old accounts
         AppwriteService.cleanupInactiveAccounts();
-        
+
         if (!mounted) return;
         Navigator.of(context).pop();
         final dept = data['department'] as String? ?? '';
         Widget destination;
         switch (widget.specialRole) {
           case 'eventAdmin':
-            destination = EventAdminHomePage(adminName: adminName, adminId: adminId);
+            destination = EventAdminHomePage(
+              adminName: adminName,
+              adminId: adminId,
+            );
             break;
           case 'hrAdmin':
-            destination = HrAdminHomePage(adminName: adminName, adminId: adminId, adminDepartment: dept);
+            destination = HrAdminHomePage(
+              adminName: adminName,
+              adminId: adminId,
+              adminDepartment: dept,
+            );
             break;
           case 'securityAdmin':
           default:
-            destination = SecurityAdminHomePage(adminName: adminName, adminId: adminId);
+            destination = SecurityAdminHomePage(
+              adminName: adminName,
+              adminId: adminId,
+            );
         }
-<<<<<<< Updated upstream
         _navigateAfterLogin(
           destination: destination,
           docId: doc.$id,
@@ -365,27 +359,9 @@ class _AdminLoginPageState extends State<AdminLoginPage>
       } else {
         // RBAC Security Check
         if (role != 'admin') {
-=======
-<<<<<<< Updated upstream
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => destination));
-      } else {
-        // RBAC Security Check
-        if (role != 'admin' && role != 'dean') {
-=======
-        _navigateAfterLogin(
-          destination: destination,
-          docId: docId,
-          username: adminId,
-          name: adminName,
-          needsOnboarding: _needsOnboarding(data),
-        );
-      } else {
-        // RBAC Security Check
-        if (role != 'admin') {
-          await AppwriteService.logout();
->>>>>>> Stashed changes
->>>>>>> Stashed changes
-          _dismissAndShowError("Unauthorized access. This portal is for Administrators only.");
+          _dismissAndShowError(
+            "Unauthorized access. This portal is for Administrators only.",
+          );
           _generateCaptcha();
           return;
         }
@@ -393,7 +369,6 @@ class _AdminLoginPageState extends State<AdminLoginPage>
         // ── Level enforcement ────────────────────────────────────────
         final accountLevel = data['level'] is int ? data['level'] as int : 1;
         if (accountLevel != widget.requiredLevel) {
-          await AppwriteService.logout();
           _dismissAndShowError(
             "These credentials belong to a Level $accountLevel account. "
             "Please use the Level $accountLevel portal.",
@@ -406,8 +381,9 @@ class _AdminLoginPageState extends State<AdminLoginPage>
 
         // Check account status
         if (data['status'] == 'disabled') {
-          await AppwriteService.logout();
-          _dismissAndShowError("Your admin account has been disabled. Please contact the Dean.");
+          _dismissAndShowError(
+            "Your admin account has been disabled. Please contact the Dean.",
+          );
           _generateCaptcha();
           return;
         }
@@ -424,7 +400,7 @@ class _AdminLoginPageState extends State<AdminLoginPage>
         await AppwriteService.databases.updateDocument(
           databaseId: AppwriteService.databaseId,
           collectionId: 'users',
-          documentId: docId,
+          documentId: doc.$id,
           data: updateData3,
         );
 
@@ -437,22 +413,11 @@ class _AdminLoginPageState extends State<AdminLoginPage>
             adminId: adminId,
             adminLevel: accountLevel,
           ),
-<<<<<<< Updated upstream
           docId: doc.$id,
-=======
-<<<<<<< Updated upstream
-        ));
-=======
-          docId: docId,
->>>>>>> Stashed changes
           username: adminId,
           name: adminName,
           needsOnboarding: _needsOnboarding(data),
         );
-<<<<<<< Updated upstream
-=======
->>>>>>> Stashed changes
->>>>>>> Stashed changes
       }
     } catch (e) {
       _dismissAndShowError("An unexpected error occurred: $e");

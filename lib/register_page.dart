@@ -360,17 +360,32 @@ class _RegisterPageState extends State<RegisterPage> {
   }
 
   Future<void> _onRegisterPressed() async {
-<<<<<<< Updated upstream
-    if (nameController.text.trim().isEmpty) { _showSnackBar("Please enter your name."); return; }
-    if (uniqueCodeController.text.trim().isEmpty) { _showSnackBar("Please enter a unique ID."); return; }
-    if (passwordController.text.trim().length < 6) { _showSnackBar("Password must be at least 6 characters."); return; }
-=======
-<<<<<<< Updated upstream
->>>>>>> Stashed changes
-    if (_localPhoto == null) { _showSnackBar("Please add a photo first."); return; }
-    if (latitude == null || longitude == null) { _showSnackBar("Please fetch your location first."); return; }
-    if (passwordController.text != confirmPasswordController.text) { _showSnackBar("Passwords do not match."); return; }
-=======
+    if (nameController.text.trim().isEmpty) {
+      _showSnackBar("Please enter your name.");
+      return;
+    }
+    if (uniqueCodeController.text.trim().isEmpty) {
+      _showSnackBar("Please enter a unique ID.");
+      return;
+    }
+    if (passwordController.text.trim().length < 6) {
+      _showSnackBar("Password must be at least 6 characters.");
+      return;
+    }
+
+    if (_localPhoto == null) {
+      _showSnackBar("Please add a photo first.");
+      return;
+    }
+    if (latitude == null || longitude == null) {
+      _showSnackBar("Please fetch your location first.");
+      return;
+    }
+    if (passwordController.text != confirmPasswordController.text) {
+      _showSnackBar("Passwords do not match.");
+      return;
+    }
+
     if (nameController.text.trim().isEmpty) {
       _showSnackBar("Please enter your name.");
       return;
@@ -395,7 +410,6 @@ class _RegisterPageState extends State<RegisterPage> {
       _showSnackBar("Passwords do not match.");
       return;
     }
->>>>>>> Stashed changes
     if (_selectedSchool == null) {
       _showSnackBar("Please select your department/school.");
       return;
