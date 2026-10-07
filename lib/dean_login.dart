@@ -71,32 +71,21 @@ class _DeanLoginPageState extends State<DeanLoginPage> {
     );
 
     try {
-      // Query Appwrite for dean-role users
-      final result = await AppwriteService.databases.listDocuments(
-        databaseId: AppwriteService.databaseId,
-        collectionId: 'users',
-        queries: [
-          Query.equal('username', deanId),
-          Query.equal('role', 'dean'),
-        ],
-      );
+      final result = await AppwriteService.loginWithMigration(deanId, password);
+      final docId = result['docId'] as String;
+      final data = result['data'] as Map<String, dynamic>;
 
       if (!mounted) return;
       Navigator.of(context).pop();
 
-      if (result.documents.isEmpty) {
+      final role = data['role'] as String?;
+      if (role != 'dean') {
+        await AppwriteService.logout();
         _showError("Invalid Executive Credentials.");
         return;
       }
 
-      final doc = result.documents.first;
-      final storedPassword = doc.data['password'] as String? ?? '';
-
-      // Dual-mode password verification
-      if (!AppwriteService.verifyPassword(password, storedPassword)) {
-        _showError("Invalid Executive Credentials.");
-        return;
-      }
+      final storedPassword = data['password'] as String? ?? '';
 
       // Auto-upgrade plaintext password to hashed
       final updateData = <String, dynamic>{
@@ -109,7 +98,7 @@ class _DeanLoginPageState extends State<DeanLoginPage> {
         await AppwriteService.databases.updateDocument(
           databaseId: AppwriteService.databaseId,
           collectionId: 'users',
-          documentId: doc.$id,
+          documentId: docId,
           data: updateData,
         );
       } catch (_) {
@@ -343,5 +332,3 @@ class _DeanLoginPageState extends State<DeanLoginPage> {
     );
   }
 }
-
-

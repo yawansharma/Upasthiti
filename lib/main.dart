@@ -217,6 +217,7 @@ class _LoginPageState extends State<LoginPage> {
       final uniqueCode = uniqueCodeController.text.trim();
       final password = passwordController.text.trim();
 
+<<<<<<< Updated upstream
       // Query by username only — password verified client-side for dual-mode support
       final response = await AppwriteService.databases.listDocuments(
         databaseId: AppwriteService.databaseId,
@@ -238,10 +239,17 @@ class _LoginPageState extends State<LoginPage> {
       }
 
       final data = response.documents.first.data;
+=======
+      // Use the new Appwrite Auth flow with migration
+      final result = await AppwriteService.loginWithMigration(uniqueCode, password);
+      final docId = result['docId'] as String;
+      final data = result['data'] as Map<String, dynamic>;
+>>>>>>> Stashed changes
 
       // RBAC Security Check
       final role = data['role'] as String?;
-      if (role == 'admin' || role == 'dean') {
+      if (role == 'admin' || role == 'dean' || role == 'officeAdmin' || role == 'eventAdmin' || role == 'hrAdmin' || role == 'securityAdmin') {
+        await AppwriteService.logout();
         _dismissDialogAndShow(
           statusText,
           "Unauthorized access. Use the correct portal.",
@@ -252,6 +260,7 @@ class _LoginPageState extends State<LoginPage> {
       // Admin Validation Check
       final status = data['status'] as String?;
       if (status == 'pending') {
+        await AppwriteService.logout();
         _dismissDialogAndShow(
           statusText,
           "Your account validation is pending from the admin. Please try again later.",
@@ -265,13 +274,14 @@ class _LoginPageState extends State<LoginPage> {
       final updateData = <String, dynamic>{
         'lastLogin': DateTime.now().toIso8601String(),
       };
+      final storedPassword = data['password'] as String? ?? '';
       if (!AppwriteService.isHashed(storedPassword)) {
         updateData['password'] = AppwriteService.hashPassword(password);
       }
       await AppwriteService.databases.updateDocument(
         databaseId: AppwriteService.databaseId,
         collectionId: 'users',
-        documentId: response.documents.first.$id,
+        documentId: docId,
         data: updateData,
       );
 

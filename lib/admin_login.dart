@@ -29,7 +29,8 @@ class AdminLoginPage extends StatefulWidget {
   State<AdminLoginPage> createState() => _AdminLoginPageState();
 }
 
-class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProviderStateMixin {
+class _AdminLoginPageState extends State<AdminLoginPage>
+    with SingleTickerProviderStateMixin {
   final usernameController = TextEditingController();
   final passwordController = TextEditingController();
   final captchaController = TextEditingController();
@@ -41,10 +42,14 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
   Color get _roleColor {
     if (widget.isOfficeAdmin) return const Color(0xFF8A6A6A);
     switch (widget.specialRole) {
-      case 'eventAdmin': return const Color(0xFF3D6B8A);
-      case 'hrAdmin': return const Color(0xFF8A7A2A);
-      case 'securityAdmin': return const Color(0xFF8A2A2A);
-      default: return AppTheme.kGreen;
+      case 'eventAdmin':
+        return const Color(0xFF3D6B8A);
+      case 'hrAdmin':
+        return const Color(0xFF8A7A2A);
+      case 'securityAdmin':
+        return const Color(0xFF8A2A2A);
+      default:
+        return AppTheme.kGreen;
     }
   }
 
@@ -82,24 +87,56 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
   String get _badgeLabel {
     if (widget.isOfficeAdmin) return "OFFICE ADMIN";
     switch (widget.specialRole) {
+<<<<<<< Updated upstream
       case 'eventAdmin': return "EVENT ADMIN";
       case 'hrAdmin': return "HR ADMIN";
       case 'securityAdmin': return "SECURITY ADMIN";
+<<<<<<< Updated upstream
       default:
         if (widget.requiredLevel == 1) return "INSTITUTION ADMIN";
         return "LEVEL ${widget.requiredLevel}";
+=======
+      default: return "LEVEL ${widget.requiredLevel}";
+=======
+      case 'eventAdmin':
+        return "EVENT ADMIN";
+      case 'hrAdmin':
+        return "HR ADMIN";
+      case 'securityAdmin':
+        return "SECURITY ADMIN";
+      default:
+        if (widget.requiredLevel == 1) return "INSTITUTION ADMIN";
+        return "LEVEL ${widget.requiredLevel}";
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes
     }
   }
 
   String get _portalTitle {
     if (widget.isOfficeAdmin) return "Office Admin Portal";
     switch (widget.specialRole) {
+<<<<<<< Updated upstream
       case 'eventAdmin': return "Event Admin Portal";
       case 'hrAdmin': return "HR Admin Portal";
       case 'securityAdmin': return "Security Admin Portal";
+<<<<<<< Updated upstream
       default:
         if (widget.requiredLevel == 1) return "Institution Admin Portal";
         return "Level ${widget.requiredLevel} Portal";
+=======
+      default: return "Level ${widget.requiredLevel} Portal";
+=======
+      case 'eventAdmin':
+        return "Event Admin Portal";
+      case 'hrAdmin':
+        return "HR Admin Portal";
+      case 'securityAdmin':
+        return "Security Admin Portal";
+      default:
+        if (widget.requiredLevel == 1) return "Institution Admin Portal";
+        return "Level ${widget.requiredLevel} Portal";
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes
     }
   }
 
@@ -124,7 +161,9 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
     _generateCaptcha(); // Generate code on startup
 
     _controller = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 800));
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
     _fadeAnim = CurvedAnimation(parent: _controller, curve: Curves.easeIn);
     _slideAnim = Tween<Offset>(
       begin: const Offset(0, 0.1),
@@ -144,9 +183,13 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
 
   // ðŸŽ² GENERATE RANDOM CAPTCHA
   void _generateCaptcha() {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Excluded confusing chars like I, 1, 0, O
+    const chars =
+        'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Excluded confusing chars like I, 1, 0, O
     setState(() {
-      _generatedCaptcha = List.generate(5, (index) => chars[Random().nextInt(chars.length)]).join();
+      _generatedCaptcha = List.generate(
+        5,
+        (index) => chars[Random().nextInt(chars.length)],
+      ).join();
     });
   }
 
@@ -176,7 +219,9 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
       builder: (context) => WillPopScope(
         onWillPop: () async => false,
         child: AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           content: ValueListenableBuilder<String>(
             valueListenable: statusText,
             builder: (context, value, child) {
@@ -184,7 +229,12 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
                 children: [
                   const CircularProgressIndicator(color: Color(0xFF6A8A73)),
                   const SizedBox(width: 20),
-                  Expanded(child: Text(value, style: const TextStyle(fontWeight: FontWeight.w600))),
+                  Expanded(
+                    child: Text(
+                      value,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
                 ],
               );
             },
@@ -194,42 +244,24 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
     );
 
     try {
-      // Query by username only — password verified client-side for dual-mode support
-      final query = await AppwriteService.databases.listDocuments(
-        databaseId: AppwriteService.databaseId,
-        collectionId: 'users',
-        queries: [
-          Query.equal('username', adminId),
-        ],
-      );
-
-      if (query.documents.isEmpty) {
-        _dismissAndShowError("Invalid Admin ID or Password");
-        _generateCaptcha();
-        return;
-      }
-
-      final doc = query.documents.first;
-      final data = doc.data;
-
-      // Dual-mode password verification (supports plaintext legacy + hashed)
+      // Use the new Appwrite Auth flow with migration
+      final result = await AppwriteService.loginWithMigration(adminId, password);
+      final docId = result['docId'] as String;
+      final data = result['data'] as Map<String, dynamic>;
+      
       final storedPassword = data['password'] as String? ?? '';
-      if (!AppwriteService.verifyPassword(password, storedPassword)) {
-        _dismissAndShowError("Invalid Admin ID or Password");
-        _generateCaptcha();
-        return;
-      }
-
       final role = data['role'] as String?;
       final adminName = data['name'] ?? adminId;
 
       if (widget.isOfficeAdmin) {
         if (role != 'officeAdmin') {
+          await AppwriteService.logout();
           _dismissAndShowError("Unauthorized. This portal is for Office Admins only.");
           _generateCaptcha();
           return;
         }
         if (data['status'] == 'disabled') {
+          await AppwriteService.logout();
           _dismissAndShowError("Your account has been disabled. Please contact administration.");
           _generateCaptcha();
           return;
@@ -245,7 +277,7 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
         await AppwriteService.databases.updateDocument(
           databaseId: AppwriteService.databaseId,
           collectionId: 'users',
-          documentId: doc.$id,
+          documentId: docId,
           data: updateData,
         );
         // Trigger lazy background cleanup of old accounts
@@ -260,19 +292,32 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
             adminId: adminId,
             adminDepartment: adminDepartment,
           ),
+<<<<<<< Updated upstream
           docId: doc.$id,
+=======
+<<<<<<< Updated upstream
+        ));
+=======
+          docId: docId,
+>>>>>>> Stashed changes
           username: adminId,
           name: adminName,
           needsOnboarding: _needsOnboarding(data),
         );
+<<<<<<< Updated upstream
+=======
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes
       } else if (widget.specialRole != null) {
         // ── Event / HR / Security Admin ───────────────────────────────
         if (role != widget.specialRole) {
+          await AppwriteService.logout();
           _dismissAndShowError("Unauthorized. This portal is for ${_portalTitle.replaceAll(' Portal', '')}s only.");
           _generateCaptcha();
           return;
         }
         if (data['status'] == 'disabled') {
+          await AppwriteService.logout();
           _dismissAndShowError("Your account has been disabled. Please contact administration.");
           _generateCaptcha();
           return;
@@ -288,7 +333,7 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
         await AppwriteService.databases.updateDocument(
           databaseId: AppwriteService.databaseId,
           collectionId: 'users',
-          documentId: doc.$id,
+          documentId: docId,
           data: updateData2,
         );
         // Trigger lazy background cleanup of old accounts
@@ -309,6 +354,7 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
           default:
             destination = SecurityAdminHomePage(adminName: adminName, adminId: adminId);
         }
+<<<<<<< Updated upstream
         _navigateAfterLogin(
           destination: destination,
           docId: doc.$id,
@@ -319,6 +365,26 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
       } else {
         // RBAC Security Check
         if (role != 'admin') {
+=======
+<<<<<<< Updated upstream
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => destination));
+      } else {
+        // RBAC Security Check
+        if (role != 'admin' && role != 'dean') {
+=======
+        _navigateAfterLogin(
+          destination: destination,
+          docId: docId,
+          username: adminId,
+          name: adminName,
+          needsOnboarding: _needsOnboarding(data),
+        );
+      } else {
+        // RBAC Security Check
+        if (role != 'admin') {
+          await AppwriteService.logout();
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes
           _dismissAndShowError("Unauthorized access. This portal is for Administrators only.");
           _generateCaptcha();
           return;
@@ -327,6 +393,7 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
         // ── Level enforcement ────────────────────────────────────────
         final accountLevel = data['level'] is int ? data['level'] as int : 1;
         if (accountLevel != widget.requiredLevel) {
+          await AppwriteService.logout();
           _dismissAndShowError(
             "These credentials belong to a Level $accountLevel account. "
             "Please use the Level $accountLevel portal.",
@@ -339,6 +406,7 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
 
         // Check account status
         if (data['status'] == 'disabled') {
+          await AppwriteService.logout();
           _dismissAndShowError("Your admin account has been disabled. Please contact the Dean.");
           _generateCaptcha();
           return;
@@ -356,7 +424,7 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
         await AppwriteService.databases.updateDocument(
           databaseId: AppwriteService.databaseId,
           collectionId: 'users',
-          documentId: doc.$id,
+          documentId: docId,
           data: updateData3,
         );
 
@@ -369,11 +437,22 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
             adminId: adminId,
             adminLevel: accountLevel,
           ),
+<<<<<<< Updated upstream
           docId: doc.$id,
+=======
+<<<<<<< Updated upstream
+        ));
+=======
+          docId: docId,
+>>>>>>> Stashed changes
           username: adminId,
           name: adminName,
           needsOnboarding: _needsOnboarding(data),
         );
+<<<<<<< Updated upstream
+=======
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes
       }
     } catch (e) {
       _dismissAndShowError("An unexpected error occurred: $e");
@@ -410,21 +489,26 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
                   const Text(
                     "upasthiti",
                     style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                        letterSpacing: 1.2),
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      letterSpacing: 1.2,
+                    ),
                   ),
                   Row(
                     children: [
                       // Level badge
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 5),
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
                         decoration: BoxDecoration(
                           color: _roleColor.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: _roleColor.withValues(alpha: 0.3)),
+                          border: Border.all(
+                            color: _roleColor.withValues(alpha: 0.3),
+                          ),
                         ),
                         child: Text(
                           _badgeLabel,
@@ -439,8 +523,11 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
                       const SizedBox(width: 8),
                       IconButton(
                         onPressed: () => Navigator.pop(context),
-                        icon: const Icon(Icons.close,
-                            color: Colors.white70, size: 20),
+                        icon: const Icon(
+                          Icons.close,
+                          color: Colors.white70,
+                          size: 20,
+                        ),
                         tooltip: "Back to level select",
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
@@ -452,20 +539,14 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
             ),
 
             // 2. TITLE SECTION (Polished Typography)
-             Padding(
+            Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    _portalTitle,
-                    style: AppTheme.headingWhite,
-                  ),
+                  Text(_portalTitle, style: AppTheme.headingWhite),
                   const SizedBox(height: 8),
-                  Text(
-                    _portalSubtitle,
-                    style: AppTheme.subheadingGrey,
-                  ),
+                  Text(_portalSubtitle, style: AppTheme.subheadingGrey),
                 ],
               ),
             ),
@@ -490,7 +571,10 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
                           TextFormField(
                             controller: usernameController,
                             textInputAction: TextInputAction.next,
-                            decoration: AppTheme.inputDecoration("Admin ID", Icons.admin_panel_settings_outlined),
+                            decoration: AppTheme.inputDecoration(
+                              "Admin ID",
+                              Icons.admin_panel_settings_outlined,
+                            ),
                           ),
                           const SizedBox(height: 16),
                           TextFormField(
@@ -498,15 +582,18 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
                             obscureText: _isObscure,
                             textInputAction: TextInputAction.next,
                             decoration: AppTheme.inputDecoration(
-                              "Password", 
+                              "Password",
                               Icons.lock_outline,
                               suffix: IconButton(
                                 icon: Icon(
-                                  _isObscure ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                                  _isObscure
+                                      ? Icons.visibility_off_outlined
+                                      : Icons.visibility_outlined,
                                   color: Colors.grey,
                                   size: 20,
                                 ),
-                                onPressed: () => setState(() => _isObscure = !_isObscure),
+                                onPressed: () =>
+                                    setState(() => _isObscure = !_isObscure),
                               ),
                             ),
                           ),
@@ -518,49 +605,67 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
                             decoration: BoxDecoration(
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: Colors.grey.shade200, width: 1.5),
+                              border: Border.all(
+                                color: Colors.grey.shade200,
+                                width: 1.5,
+                              ),
                               boxShadow: [
                                 BoxShadow(
                                   color: Colors.black.withValues(alpha: 0.02),
                                   blurRadius: 10,
                                   offset: const Offset(0, 4),
-                                )
-                              ]
+                                ),
+                              ],
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  "Security Check", 
-                                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontWeight: FontWeight.bold)
+                                  "Security Check",
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey.shade600,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                                 const SizedBox(height: 12),
                                 Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
                                   children: [
                                     // Captcha Display Code
                                     Expanded(
                                       child: Container(
-                                        padding: const EdgeInsets.symmetric(vertical: 14),
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 14,
+                                        ),
                                         decoration: BoxDecoration(
                                           color: Colors.grey.shade100,
-                                          borderRadius: BorderRadius.circular(12),
-                                          border: Border.all(color: Colors.grey.shade300),
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                          border: Border.all(
+                                            color: Colors.grey.shade300,
+                                          ),
                                           image: const DecorationImage(
-                                            image: NetworkImage("https://www.transparenttextures.com/patterns/black-scales.png"), 
+                                            image: NetworkImage(
+                                              "https://www.transparenttextures.com/patterns/black-scales.png",
+                                            ),
                                             opacity: 0.05,
                                             fit: BoxFit.cover,
                                           ),
                                         ),
                                         child: Center(
                                           child: Text(
-                                            _generatedCaptcha.split('').join(' '), // Add spacing
+                                            _generatedCaptcha
+                                                .split('')
+                                                .join(' '), // Add spacing
                                             style: const TextStyle(
                                               fontWeight: FontWeight.bold,
                                               fontSize: 22,
                                               letterSpacing: 6,
                                               color: Color(0xFF2D3142),
-                                              fontFamily: 'Courier', 
+                                              fontFamily: 'Courier',
                                             ),
                                           ),
                                         ),
@@ -570,12 +675,17 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
                                     // Refresh Button
                                     Container(
                                       decoration: BoxDecoration(
-                                        color: const Color(0xFF6A8A73).withValues(alpha: 0.1),
-                                        borderRadius: BorderRadius.circular(12)
+                                        color: const Color(
+                                          0xFF6A8A73,
+                                        ).withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(12),
                                       ),
                                       child: IconButton(
                                         onPressed: _generateCaptcha,
-                                        icon: const Icon(Icons.refresh_rounded, color: AppTheme.kGreen),
+                                        icon: const Icon(
+                                          Icons.refresh_rounded,
+                                          color: AppTheme.kGreen,
+                                        ),
                                         tooltip: "Refresh Captcha",
                                       ),
                                     ),
@@ -586,7 +696,10 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
                                   controller: captchaController,
                                   textInputAction: TextInputAction.done,
                                   onFieldSubmitted: (_) => _login(),
-                                  decoration: AppTheme.inputDecoration("Enter Captcha", Icons.security),
+                                  decoration: AppTheme.inputDecoration(
+                                    "Enter Captcha",
+                                    Icons.security,
+                                  ),
                                 ),
                               ],
                             ),
@@ -632,7 +745,9 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
                                     decoration: BoxDecoration(
                                       boxShadow: [
                                         BoxShadow(
-                                          color: const Color(0xFF6A8A73).withValues(alpha: 0.15),
+                                          color: const Color(
+                                            0xFF6A8A73,
+                                          ).withValues(alpha: 0.15),
                                           blurRadius: 20,
                                           spreadRadius: 2,
                                         ),
@@ -640,12 +755,14 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
                                     ),
                                     child: ColorFiltered(
                                       colorFilter: ColorFilter.mode(
-                                        const Color(0xFF6A8A73).withValues(alpha: 0.1), 
+                                        const Color(
+                                          0xFF6A8A73,
+                                        ).withValues(alpha: 0.1),
                                         BlendMode.srcATop,
                                       ),
                                       child: Image.asset(
                                         'assets/upasthiti.png',
-                                        width: 90, 
+                                        width: 90,
                                         fit: BoxFit.contain,
                                       ),
                                     ),
@@ -654,7 +771,9 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
                                   Text(
                                     "POWERED BY upasthiti",
                                     style: TextStyle(
-                                      color: const Color(0xFF6A8A73).withValues(alpha: 0.8),
+                                      color: const Color(
+                                        0xFF6A8A73,
+                                      ).withValues(alpha: 0.8),
                                       fontSize: 10,
                                       fontWeight: FontWeight.bold,
                                       letterSpacing: 1.5,
@@ -678,4 +797,3 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
     );
   }
 }
-
