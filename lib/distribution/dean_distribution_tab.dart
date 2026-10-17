@@ -8,6 +8,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:excel/excel.dart' hide Border, Center;
 import '../services/distribution_service.dart';
 import '../services/appwrite_service.dart';
+import '../services/admin_roles.dart';
 
 const Color _kDark = Color(0xFF10121C);
 const Color _kGold = Color(0xFFD4AF37);
@@ -791,7 +792,9 @@ class _EventDetailSheetState extends State<_EventDetailSheet> {
                   queries: [Query.equal('role', 'admin'), Query.limit(50)],
                 );
                 setDlg(() {
-                  adminList = r.documents;
+                  adminList = r.documents
+                      .where((d) => isHierarchyAdmin(d.data))
+                      .toList();
                   loading = false;
                 });
               } catch (_) {

@@ -13,7 +13,7 @@ import '../services/admin_presence_service.dart';
 class AdminPresenceCard extends StatefulWidget {
   final String adminId;
   final String adminName;
-  final String role; // 'admin' | 'officeAdmin' | 'eventAdmin' | ...
+  final String role; // 'admin' | 'eventAdmin' (department admins pass 'admin')
   final int level; // 0 for special roles, 1/2/3 for hierarchy admins
   final String department;
   final String? parentAdminId;

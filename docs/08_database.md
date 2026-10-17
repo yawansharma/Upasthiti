@@ -17,9 +17,9 @@ Stores all user accounts: students, admins of all types, and the Dean.
 | `username` | String | Unique login identifier; used as the primary lookup key |
 | `name` | String | Display name |
 | `password` | String | SHA-256 hash (or plaintext for legacy accounts during migration) |
-| `role` | String | `student`, `admin`, `officeAdmin`, `eventAdmin`, `hrAdmin`, `securityAdmin`, `dean` |
-| `level` | Integer | For `admin` role: 1 (Institution), 2 (Department), 3 (Team Leader); null for others |
-| `department` | String | Department or school affiliation |
+| `role` | String | `student`, `admin`, `eventAdmin`, `dean`. Legacy `officeAdmin` / `hrAdmin` / `securityAdmin` are converted to `admin` on next login |
+| `level` | Integer | For hierarchy admins (`admin` with an academic department): 1 (Institution), 2 (Department), 3 (Team Leader); null for others, including department admins |
+| `department` | String | Academic school for students and L1-L3 admins. For department admins it is a functional role: `Office`, `HR`, `Security`, `Finance` |
 | `status` | String | `pending` (awaiting approval) or `active` (approved) |
 | `profilePictureId` | String? | Appwrite Storage file ID for profile photo |
 | `latitude` | Double? | Registered location latitude (captured at registration) |

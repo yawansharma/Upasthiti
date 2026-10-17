@@ -9,7 +9,8 @@ import 'package:excel/excel.dart' hide Border, Center;
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
-import 'dean_login.dart';
+import 'main.dart';
+import 'services/admin_roles.dart';
 import 'admin_home_page.dart';
 import 'admin_hierarchy_views.dart';
 import 'app_theme.dart';
@@ -336,7 +337,7 @@ class _DeanHomePageState extends State<DeanHomePage> {
             onTap: () {
               Navigator.pushAndRemoveUntil(
                 context,
-                MaterialPageRoute(builder: (_) => const DeanLoginPage()),
+                MaterialPageRoute(builder: (_) => const LoginPage()),
                 (route) => false,
               );
             },
@@ -694,7 +695,7 @@ class _DeanReportsTabState extends State<_DeanReportsTab> {
         databaseId: _kDb,
         collectionId: 'users',
         queries: [
-          Query.equal('role', ['admin', 'officeAdmin', 'eventAdmin', 'hrAdmin', 'securityAdmin']),
+          Query.equal('role', kAdminRoleValues),
           Query.limit(500),
         ],
       );
@@ -770,16 +771,6 @@ class _DeanReportsTabState extends State<_DeanReportsTab> {
     }
   }
 
-  String _roleLabel(String? role) {
-    switch (role) {
-      case 'officeAdmin': return 'Office Admin';
-      case 'eventAdmin': return 'Event Admin';
-      case 'hrAdmin': return 'HR Admin';
-      case 'securityAdmin': return 'Security Admin';
-      default: return 'Admin';
-    }
-  }
-
   Future<void> _exportExcel() async {
     setState(() => _exporting = true);
     try {
@@ -798,11 +789,7 @@ class _DeanReportsTabState extends State<_DeanReportsTab> {
       for (final a in _admins) {
         final d = a.data;
         final id = d['username'] as String? ?? a.$id;
-        final role = d['role'] as String?;
-        final level = d['level'];
-        final roleLabel = (role == 'admin' && level != null)
-            ? _levelLabel(level)
-            : _roleLabel(role);
+        final roleLabel = adminLabel(d);
         final raw = d['lastLogin'] as String?;
         final lastLogin = raw != null
             ? DateFormat('dd/MM/yyyy HH:mm').format(DateTime.parse(raw))
@@ -1033,11 +1020,7 @@ class _DeanReportsTabState extends State<_DeanReportsTab> {
           ..._admins.map((a) {
             final d = a.data;
             final id = d['username'] as String? ?? a.$id;
-            final role = d['role'] as String?;
-            final level = d['level'];
-            final roleLabel = (role == 'admin' && level != null)
-                ? _levelLabel(level)
-                : _roleLabel(role);
+            final roleLabel = adminLabel(d);
             final classes = _classesPerAdmin[id] ?? 0;
             final logs = _logsPerAdmin[id] ?? 0;
             final status = d['status'] as String? ?? 'active';
@@ -1178,17 +1161,6 @@ class _AdminListTabState extends State<_AdminListTab> {
   bool _loading = true;
   RealtimeSubscription? _sub;
 
-  final List<String> departments = [
-    "School of Computing (SoC)",
-    "School of Electrical & Electronics Engineering (SEEE)",
-    "School of Mechanical Engineering (SoME)",
-    "School of Civil Engineering (SoCE)",
-    "School of Chemical & Biotechnology (SCBT)",
-    "School of Law",
-    "School of Management (SoM)",
-    "School of Arts, Sciences, Humanities & Education (SASHE)"
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -1212,13 +1184,7 @@ class _AdminListTabState extends State<_AdminListTab> {
         databaseId: AppwriteService.databaseId,
         collectionId: 'users',
         queries: [
-          Query.equal('role', [
-            'admin',
-            'officeAdmin',
-            'eventAdmin',
-            'hrAdmin',
-            'securityAdmin',
-          ]),
+          Query.equal('role', kAdminRoleValues),
           Query.limit(500),
         ],
       );
@@ -1235,49 +1201,45 @@ class _AdminListTabState extends State<_AdminListTab> {
   }
 
   void _showAddAdminSheet() {
-    const roleValues = [
-      'admin', 'admin', 'admin',
-      'officeAdmin', 'eventAdmin', 'hrAdmin', 'securityAdmin',
-    ];
-    const levelValues = [1, 2, 3, 0, 0, 0, 0];
+    // Office / HR / Security / Finance … are regular admins (no level) whose
+    // power comes from a functional department — see services/admin_roles.dart.
+    const deptAdminIdx = 4;
+    const roleValues = ['admin', 'admin', 'admin', 'eventAdmin', 'admin'];
+    const levelValues = [1, 2, 3, 0, 0];
     const roleLabels = [
       'Institution Admin', 'Dept. Head (HoD)', 'Team Leader',
-      'Office Admin', 'Event Admin', 'HR Admin', 'Security Admin',
+      'Event Admin', 'Department Admin',
     ];
-    const roleShort = ['Inst.', 'Dept.', 'Team', 'Office', 'Event', 'HR', 'Security'];
+    const roleShort = ['Inst.', 'Dept.', 'Team', 'Event', 'Dept. Role'];
     const roleSubtitles = [
       'Institution Admin — Full institutional oversight',
       'Dept. Head (HoD) — Department management',
       'Team Leader — Class-level control',
-      'Biometrics & attendance records',
       'Exclusive event hosting & QR scanning',
-      'Leave requests & registration approvals',
-      'Audit logs & access control',
+      'Office, HR, Security, Finance — powers come from the department',
     ];
     const roleIcons = [
       Icons.account_balance_outlined,
       Icons.domain_outlined,
       Icons.class_outlined,
-      Icons.manage_accounts_outlined,
       Icons.event_outlined,
-      Icons.people_alt_outlined,
-      Icons.security_outlined,
+      Icons.apartment_outlined,
     ];
     const roleColors = [
       Color(0xFF6A8A73),
       Color(0xFF4E7A8A),
       Color(0xFF7A6A8A),
-      Color(0xFF8A6A6A),
       Color(0xFF3D6B8A),
-      Color(0xFF8A7A2A),
-      Color(0xFF8A2A2A),
+      Color(0xFF8A6A6A),
     ];
-    const roleNeedsDept = [true, true, true, true, false, true, false];
+    const roleNeedsDept = [true, true, true, false, true];
+    List<String> deptOptionsFor(int idx) =>
+        idx == deptAdminIdx ? kFunctionalDepartments : kAcademicDepartments;
 
     final usernameCtrl = TextEditingController();
     final nameCtrl = TextEditingController();
     final passCtrl = TextEditingController();
-    String selectedDept = departments.first;
+    String selectedDept = kAcademicDepartments.first;
     int selectedIdx = 0;
     models.Document? selectedParent;
     Map<String, dynamic>? selectedBoundary;
@@ -1354,13 +1316,18 @@ class _AdminListTabState extends State<_AdminListTab> {
                     height: 76,
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
-                      itemCount: 7,
+                      itemCount: roleValues.length,
                       separatorBuilder: (_, __) => const SizedBox(width: 8),
                       itemBuilder: (_, i) {
                         final selected = selectedIdx == i;
                         return GestureDetector(
-                          onTap: () =>
-                              setSheetState(() => selectedIdx = i),
+                          onTap: () => setSheetState(() {
+                            selectedIdx = i;
+                            final options = deptOptionsFor(i);
+                            if (!options.contains(selectedDept)) {
+                              selectedDept = options.first;
+                            }
+                          }),
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 150),
                             width: 72,
@@ -1468,13 +1435,16 @@ class _AdminListTabState extends State<_AdminListTab> {
                   if (roleNeedsDept[selectedIdx]) ...[
                     const SizedBox(height: 14),
                     DropdownButtonFormField<String>(
+                      // Rebuild when switching between academic and
+                      // functional department lists.
+                      key: ValueKey(selectedIdx == deptAdminIdx),
                       isExpanded: true,
                       value: selectedDept,
                       decoration: InputDecoration(
                           labelText: 'Department',
                           border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12))),
-                      items: departments
+                      items: deptOptionsFor(selectedIdx)
                           .map((d) => DropdownMenuItem(
                               value: d,
                               child: Text(d,
@@ -1633,7 +1603,7 @@ class _AdminListTabState extends State<_AdminListTab> {
                                   'createdAt':
                                       DateTime.now().toIso8601String(),
                                 };
-                                if (roleValues[selectedIdx] == 'admin') {
+                                if (levelValues[selectedIdx] > 0) {
                                   docData['level'] =
                                       levelValues[selectedIdx];
                                   docData['managedClasses'] = <String>[];
@@ -1666,7 +1636,7 @@ class _AdminListTabState extends State<_AdminListTab> {
                                   ScaffoldMessenger.of(context)
                                       .showSnackBar(SnackBar(
                                           content: Text(
-                                              '${roleLabels[selectedIdx]} onboarded.')));
+                                              '${selectedIdx == deptAdminIdx ? '$selectedDept Admin' : roleLabels[selectedIdx]} onboarded.')));
                                 }
                               } catch (e) {
                                 setSheetState(() => saving = false);
@@ -2360,34 +2330,50 @@ class _AdminListTabState extends State<_AdminListTab> {
     ),
   };
 
+  /// Grouping key for non-hierarchy admins: 'Event', or the functional
+  /// department ('Office', 'HR', 'Security', 'Finance' …).
+  static String? _specialKey(Map<String, dynamic> data) {
+    if (adminKindOf(data) == AdminKind.event) return 'Event';
+    return functionalDeptOf(data);
+  }
+
+  static const _specialOrder = ['Event', ...kFunctionalDepartments];
+
   static const _specialRoleMeta = {
-    'officeAdmin': (
+    kDeptOffice: (
       color: Color(0xFF8A6A6A),
       icon: Icons.manage_accounts_outlined,
       label: "Office Admin",
       badge: "OA",
       scope: "Biometrics & records",
     ),
-    'eventAdmin': (
+    'Event': (
       color: Color(0xFF3D6B8A),
       icon: Icons.event_outlined,
       label: "Event Admin",
       badge: "EA",
       scope: "Event hosting",
     ),
-    'hrAdmin': (
+    kDeptHr: (
       color: Color(0xFF8A7A2A),
       icon: Icons.people_alt_outlined,
       label: "HR Admin",
       badge: "HR",
       scope: "Leave & approvals",
     ),
-    'securityAdmin': (
+    kDeptSecurity: (
       color: Color(0xFF8A2A2A),
       icon: Icons.security_outlined,
       label: "Security Admin",
       badge: "SA",
       scope: "Audit & access control",
+    ),
+    kDeptFinance: (
+      color: Color(0xFF5A6A7A),
+      icon: Icons.account_balance_wallet_outlined,
+      label: "Finance Admin",
+      badge: "FN",
+      scope: "Finance (coming soon)",
     ),
   };
 
@@ -2428,20 +2414,19 @@ class _AdminListTabState extends State<_AdminListTab> {
   Widget _buildGroupedList() {
     final Map<int, List<models.Document>> levelGrouped = {1: [], 2: [], 3: []};
     final Map<String, List<models.Document>> specialGrouped = {
-      'officeAdmin': [],
-      'eventAdmin': [],
-      'hrAdmin': [],
-      'securityAdmin': [],
+      for (final key in _specialOrder) key: [],
     };
 
     for (final doc in _admins) {
-      final role = doc.data['role'] as String? ?? 'admin';
-      if (role == 'admin') {
+      if (isHierarchyAdmin(doc.data)) {
         final lvl = (doc.data['level'] as int?) ?? 1;
         final clamped = (lvl >= 1 && lvl <= 3) ? lvl : 1;
         levelGrouped[clamped]!.add(doc);
-      } else if (specialGrouped.containsKey(role)) {
-        specialGrouped[role]!.add(doc);
+      } else {
+        final key = _specialKey(doc.data);
+        if (key != null && specialGrouped.containsKey(key)) {
+          specialGrouped[key]!.add(doc);
+        }
       }
     }
 
@@ -2462,7 +2447,7 @@ class _AdminListTabState extends State<_AdminListTab> {
             const SizedBox(height: 20),
           ],
 
-        for (final role in ['officeAdmin', 'eventAdmin', 'hrAdmin', 'securityAdmin'])
+        for (final role in _specialOrder)
           if (specialGrouped[role]!.isNotEmpty) ...[
             _buildSpecialRoleHeader(role, specialGrouped[role]!.length),
             const SizedBox(height: 10),
@@ -2635,19 +2620,18 @@ class _AdminListTabState extends State<_AdminListTab> {
     final data = doc.data;
     final isActive = data['status'] != 'disabled';
     final String? lastLoginStr = data['lastLogin'] as String?;
-    final String role = data['role'] as String? ?? 'admin';
     final int level = (data['level'] as int?) ?? 1;
 
     final Color cardColor;
     final IconData cardIcon;
     final String badgeText;
-    if (role == 'admin') {
+    if (isHierarchyAdmin(data)) {
       final m = _levelMeta[level] ?? _levelMeta[1]!;
       cardColor = m.color;
       cardIcon = m.icon;
       badgeText = '$level';
     } else {
-      final m = _specialRoleMeta[role] ??
+      final m = _specialRoleMeta[_specialKey(data)] ??
           (
             color: kDeanGold,
             icon: Icons.admin_panel_settings,

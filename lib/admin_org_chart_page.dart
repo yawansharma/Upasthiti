@@ -5,26 +5,18 @@ import 'app_theme.dart';
 import 'services/appwrite_service.dart';
 import 'components/user_avatar.dart';
 import 'services/admin_hierarchy_service.dart';
-
-const _kSpecialRoles = ['officeAdmin', 'eventAdmin', 'hrAdmin', 'securityAdmin'];
-
-const _kSpecialRoleLabels = {
-  'officeAdmin': 'Office Admin',
-  'eventAdmin': 'Event Admin',
-  'hrAdmin': 'HR Admin',
-  'securityAdmin': 'Security Admin',
-};
+import 'services/admin_roles.dart';
 
 class _SpecialRoleAdmin {
   final String id;
   final String name;
-  final String role;
+  final String label;
   final String? profilePictureId;
 
   _SpecialRoleAdmin({
     required this.id,
     required this.name,
-    required this.role,
+    required this.label,
     this.profilePictureId,
   });
 }
@@ -69,34 +61,28 @@ class _AdminOrgChartPageState extends State<AdminOrgChartPage> {
 
   Future<void> _fetchAndBuildTree() async {
     try {
-      // 1. Fetch all admins
+      // 1. Fetch all admins (hierarchy + event + department admins)
       final result = await AppwriteService.databases.listDocuments(
         databaseId: AppwriteService.databaseId,
         collectionId: 'users',
         queries: [
-          Query.equal('role', 'admin'),
+          Query.equal('role', kAdminRoleValues),
           Query.limit(500),
         ],
       );
-      final admins = result.documents;
+      final admins =
+          result.documents.where((d) => isHierarchyAdmin(d.data)).toList();
 
-      // 1b. Fetch cross-cutting roles separately — they have no
+      // 1b. Cross-cutting roles (Event, Office, HR, Security …) — they have no
       // head/supervisor relationship to nest in the tree above.
-      final specialResult = await AppwriteService.databases.listDocuments(
-        databaseId: AppwriteService.databaseId,
-        collectionId: 'users',
-        queries: [
-          Query.equal('role', _kSpecialRoles),
-          Query.limit(200),
-        ],
-      );
-      final specialRoleAdmins = specialResult.documents
+      final specialRoleAdmins = result.documents
+          .where((d) => !isHierarchyAdmin(d.data))
           .map((doc) => _SpecialRoleAdmin(
                 id: doc.data['username'] as String? ?? '',
                 name: doc.data['name'] as String? ??
                     doc.data['username'] as String? ??
                     'Admin',
-                role: doc.data['role'] as String? ?? '',
+                label: adminLabel(doc.data),
                 profilePictureId: doc.data['profilePictureId'] as String?,
               ))
           .where((a) => a.id.isNotEmpty)
@@ -313,7 +299,7 @@ class _AdminOrgChartPageState extends State<AdminOrgChartPage> {
                           style: const TextStyle(
                               fontWeight: FontWeight.w600, fontSize: 13)),
                       Text(
-                        _kSpecialRoleLabels[a.role] ?? a.role,
+                        a.label,
                         style: TextStyle(
                             fontSize: 11, color: Colors.grey.shade600),
                       ),

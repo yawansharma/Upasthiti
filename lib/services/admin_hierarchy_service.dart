@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:appwrite/appwrite.dart';
 import 'package:appwrite/models.dart' as models;
 import 'appwrite_service.dart';
+import 'admin_roles.dart';
 
 /// Assignment metadata is stored in the class [boundary] JSON (always writable)
 /// and mirrored on user docs when those attributes exist in Appwrite.
@@ -499,47 +500,40 @@ class AdminHierarchyService {
     );
   }
 
-  /// Usernames of the admin(s) allowed to approve a leave request from
-  /// [requesterId] at [requesterLevel]. Level 3 approvers are the
-  /// supervisor(s) of the requester's own classes; Level 2's approver is
-  /// whichever L1 they report to; Level 1 routes to the Dean.
-  /// Active HR Admin usernames, preferring ones in [department] but falling
-  /// back to any HR Admin so a student never hits a dead end just because
-  /// their department has no dedicated HR Admin.
-  static Future<List<String>> _resolveHrApprovers(String? department) async {
+  /// Active HR Admin usernames: `role: 'admin'` + department 'HR', plus
+  /// legacy `hrAdmin` docs that have not been migrated yet. HR is a
+  /// functional department, so every HR Admin can approve any student.
+  static Future<List<String>> _resolveHrApprovers() async {
     final result = await AppwriteService.databases.listDocuments(
       databaseId: databaseId,
       collectionId: usersCollection,
-      queries: [Query.equal('role', 'hrAdmin'), Query.limit(100)],
+      queries: [
+        Query.equal('role', ['admin', 'hrAdmin']),
+        Query.limit(500),
+      ],
     );
-    final active = result.documents
-        .where((d) => d.data['status'] != 'disabled')
-        .toList();
-    if (department != null && department.isNotEmpty) {
-      final scoped = active
-          .where((d) => d.data['department'] == department)
-          .map((d) => d.data['username'] as String? ?? '')
-          .where((u) => u.isNotEmpty)
-          .toList();
-      if (scoped.isNotEmpty) return scoped;
-    }
-    return active
+    return result.documents
+        .where((d) =>
+            adminKindOf(d.data) == AdminKind.hr &&
+            d.data['status'] != 'disabled')
         .map((d) => d.data['username'] as String? ?? '')
         .where((u) => u.isNotEmpty)
         .toList();
   }
 
-  /// Approver(s) for a student's leave request — routed to HR Admin(s),
-  /// preferring one in the student's own department. Students have no
-  /// `level`, so this is called separately from the admin-hierarchy chain
-  /// in [resolveApprovers].
+  /// Approver(s) for a student's leave request — routed to the HR Admin(s).
+  /// Students have no `level`, so this is called separately from the
+  /// admin-hierarchy chain in [resolveApprovers].
   static Future<List<String>> resolveStudentApprovers(
     String studentId,
   ) async {
-    final student = await findUserByUsername(studentId);
-    return _resolveHrApprovers(student?.data['department'] as String?);
+    return _resolveHrApprovers();
   }
 
+  /// Usernames of the admin(s) allowed to approve a leave request from
+  /// [requesterId] at [requesterLevel]. Level 3 approvers are the
+  /// supervisor(s) of the requester's own classes; Level 2's approver is
+  /// whichever L1 they report to; Level 1 routes to the Dean.
   static Future<List<String>> resolveApprovers({
     required String requesterId,
     required int requesterLevel,

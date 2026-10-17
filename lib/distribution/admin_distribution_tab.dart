@@ -10,6 +10,7 @@ import '../services/distribution_service.dart';
 import '../services/appwrite_service.dart';
 import 'admin_scan_page.dart';
 import '../components/user_avatar.dart';
+import '../services/admin_roles.dart';
 
 // Admin theme constants
 const Color _kGreen = Color(0xFF6A8A73);
@@ -1224,7 +1225,9 @@ class _AdminEventDetailSheetState extends State<_AdminEventDetailSheet> {
                   queries: [Query.equal('role', 'admin'), Query.limit(50)],
                 );
                 setDlg(() {
-                  adminList = r.documents;
+                  adminList = r.documents
+                      .where((d) => isHierarchyAdmin(d.data))
+                      .toList();
                   loading = false;
                 });
               } catch (_) {

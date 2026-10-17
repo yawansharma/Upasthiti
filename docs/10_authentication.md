@@ -21,8 +21,8 @@ sequenceDiagram
     App->>App: verifyPassword(input, storedValue)
     
     alt Password verified
-        App->>App: Check role matches portal
-        App->>App: Check status == 'active'
+        App->>App: Derive admin type from role/level/department
+        App->>App: Reject if status == 'disabled'
         App->>AppwriteDB: updateDocument(lastLogin = now)
         App-->>User: Navigate to home
     else Password failed
@@ -48,12 +48,7 @@ On successful login with a plaintext password, the system immediately upgrades t
 
 ## Admin Login CAPTCHA
 
-Before any admin login attempt can be submitted, the user must solve a randomly generated arithmetic CAPTCHA (e.g., `7 + 4 = ?`). The CAPTCHA:
-- Is regenerated fresh on every page load.
-- Can be refreshed manually.
-- Must be answered correctly before the credential fields are even enabled.
-
-This is an additional layer that specifically targets admin accounts, which are higher-value targets for brute-force or scripted login attempts.
+Before an admin login attempt is submitted, the user must type a randomly generated 5-character alphanumeric CAPTCHA (ambiguous characters such as `0/O/1/I` are excluded). It is regenerated on page load and after every failed attempt, and can be refreshed manually. It applies to every admin type, including the Dean.
 
 ---
 
@@ -67,25 +62,29 @@ There is no persistent session storage (no `shared_preferences` or secure storag
 
 ## Role-Based Access Control (RBAC)
 
-### Portal-Level Enforcement
-Each admin portal is accessed through a distinct login flow:
-- The `AdminLevelSelectPage` shows role/level selection cards.
-- Each card navigates to `AdminLoginPage` with a `specialRole` or `requiredLevel` parameter.
-- On login, the fetched user document must have a `role` field that matches the selected role, AND if a level admin, the `level` integer must match.
+### Single Admin Login
+Every admin (Dean, L1/L2/L3, Event, and department admins) signs in through the same `AdminLoginPage`, reached from the **ADMIN** button on the main login screen. There is no portal or level selector. After the credentials are verified, the account's own record decides the dashboard (`adminKindOf` in `lib/services/admin_roles.dart`):
 
-Example: If a user tries to log in through the Level 1 portal, but their `role == 'admin'` and `level == 3`, login is rejected with a mismatch error.
+| Record | Dashboard |
+|---|---|
+| `role == 'dean'` | `DeanHomePage` |
+| `role == 'admin'`, department is academic (or empty) | `AdminHomePage` at the account's `level` (1-3) |
+| `role == 'admin'`, `department == 'Office'` | `OfficeAdminHomePage` |
+| `role == 'admin'`, `department == 'HR'` | `HrAdminHomePage` |
+| `role == 'admin'`, `department == 'Security'` | `SecurityAdminHomePage` |
+| `role == 'admin'`, `department == 'Finance'` (or another functional department) | `DepartmentAdminHomePage` (placeholder) |
+| `role == 'eventAdmin'` | `EventAdminHomePage` |
+| anything else | rejected: "This account doesn't have admin access." |
+
+Office, HR, Security and Finance are *functional departments*: ordinary admins with no `level`, whose power comes from `department`. Each admin holds one such role.
+
+**Legacy accounts.** Documents with `role` of `officeAdmin`, `hrAdmin` or `securityAdmin` are still recognised. On their next login they are rewritten to `role: 'admin'`, `department: 'Office' | 'HR' | 'Security'`, `level: null`.
 
 ### Student Login Rejection of Admin Roles
-The standard employee login screen explicitly rejects users with `role == 'admin'` or `role == 'dean'`, displaying "Unauthorized access. Use the correct portal."
+The standard employee login screen rejects every account that is an admin type (`adminKindOf(data) != AdminKind.notAdmin`: Dean, any `admin`, Event and legacy special roles), displaying "Unauthorized access. Use the correct portal."
 
 ### Inactive Account Gate
 Users with `status == 'pending'` cannot log in. They see a message explaining their account is awaiting admin approval.
-
-### Dean Secret Gate
-The Dean login is not exposed in any menu. It requires:
-1. Tapping the upasthiti logo exactly 5 times in rapid succession.
-2. A "Super Admin Portal" button appears.
-3. Navigating to `DeanHomePage` requires successful authentication against a user with `role == 'dean'`.
 
 ---
 

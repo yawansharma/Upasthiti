@@ -15,6 +15,7 @@ import 'package:pdf/widgets.dart' as pw;
 
 import 'app_theme.dart';
 import 'services/appwrite_service.dart';
+import 'services/admin_roles.dart';
 import 'services/admin_presence_service.dart';
 import 'services/export_service.dart';
 import 'components/user_avatar.dart';
@@ -55,15 +56,19 @@ class _OfficeAdminHomePageState extends State<OfficeAdminHomePage> {
   @override
   void initState() {
     super.initState();
+    // A functional department ('Office') is the admin's role, not a school —
+    // only scope student data when the admin belongs to an academic school.
+    final studentScope =
+        isFunctionalDept(widget.adminDepartment) ? '' : widget.adminDepartment;
     _tabs = [
       _OverviewTab(
           adminId: widget.adminId,
           adminName: widget.adminName,
           department: widget.adminDepartment),
       _AdminsTab(adminId: widget.adminId, adminName: widget.adminName),
-      _StudentsTab(department: widget.adminDepartment),
-      _ReportsTab(department: widget.adminDepartment),
-      _BiometricsTab(department: widget.adminDepartment, adminId: widget.adminId),
+      _StudentsTab(department: studentScope),
+      _ReportsTab(department: studentScope),
+      _BiometricsTab(department: studentScope, adminId: widget.adminId),
       _VerificationTab(),
       _AuditTrailTab(adminId: widget.adminId),
     ];
@@ -238,7 +243,7 @@ class _OverviewTabState extends State<_OverviewTab> {
       final queries = <String>[
         Query.equal('role', 'student'),
         Query.equal('status', 'active'),
-        if (widget.department.isNotEmpty)
+        if (widget.department.isNotEmpty && !isFunctionalDept(widget.department))
           Query.equal('department', widget.department),
         Query.limit(5000),
       ];
@@ -303,7 +308,7 @@ class _OverviewTabState extends State<_OverviewTab> {
                     AdminPresenceCard(
                       adminId: widget.adminId,
                       adminName: widget.adminName,
-                      role: 'officeAdmin',
+                      role: 'admin',
                       level: 0,
                       department: widget.department,
                       accent: _kOAAccent,
@@ -321,7 +326,7 @@ class _OverviewTabState extends State<_OverviewTab> {
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
                             color: Colors.black87)),
-                    Text(widget.department.isNotEmpty
+                    Text(widget.department.isNotEmpty && !isFunctionalDept(widget.department)
                         ? widget.department
                         : "All Departments",
                         style: const TextStyle(
@@ -2051,43 +2056,7 @@ class _AuditTrailTabState extends State<_AuditTrailTab> {
 // Tab — Admins (create L1/L2/L3, assign parent, set boundary, export activity)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const List<String> _kDepartments = [
-  "School of Computing (SoC)",
-  "School of Electrical & Electronics Engineering (SEEE)",
-  "School of Mechanical Engineering (SoME)",
-  "School of Civil Engineering (SoCE)",
-  "School of Chemical & Biotechnology (SCBT)",
-  "School of Law",
-  "School of Management (SoM)",
-  "School of Arts, Sciences, Humanities & Education (SASHE)",
-];
 
-String _roleLevelLabel(String? role, dynamic level) {
-  if (role == 'admin') {
-    switch (level) {
-      case 1:
-        return 'Institution Admin';
-      case 2:
-        return 'Head of Department';
-      case 3:
-        return 'Team Leader';
-      default:
-        return 'Admin';
-    }
-  }
-  switch (role) {
-    case 'officeAdmin':
-      return 'Office Admin';
-    case 'eventAdmin':
-      return 'Event Admin';
-    case 'hrAdmin':
-      return 'HR Admin';
-    case 'securityAdmin':
-      return 'Security Admin';
-    default:
-      return role ?? 'Admin';
-  }
-}
 
 class _AdminsTab extends StatefulWidget {
   final String adminId;
@@ -2127,7 +2096,9 @@ class _AdminsTabState extends State<_AdminsTab> {
       );
       if (mounted) {
         setState(() {
-          _admins = result.documents;
+          _admins = result.documents
+              .where((d) => adminKindOf(d.data) != AdminKind.office)
+              .toList();
           _loading = false;
         });
       }
@@ -2155,7 +2126,7 @@ class _AdminsTabState extends State<_AdminsTab> {
     final usernameCtrl = TextEditingController();
     final nameCtrl = TextEditingController();
     final passCtrl = TextEditingController();
-    String selectedDept = _kDepartments.first;
+    String selectedDept = kAcademicDepartments.first;
     int selectedIdx = 0;
     models.Document? selectedParent;
     Map<String, dynamic>? selectedBoundary;
@@ -2277,7 +2248,7 @@ class _AdminsTabState extends State<_AdminsTab> {
                         labelText: 'Department',
                         border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12))),
-                    items: _kDepartments
+                    items: kAcademicDepartments
                         .map((d) => DropdownMenuItem(
                             value: d,
                             child:
@@ -2625,7 +2596,7 @@ class _AdminsTabState extends State<_AdminsTab> {
         sheet.appendRow([
           TextCellValue(m['adminName'] as String? ?? ''),
           TextCellValue(m['adminId'] as String? ?? ''),
-          TextCellValue(_roleLevelLabel(m['role'] as String?, m['level'])),
+          TextCellValue(adminLabel(m)),
           TextCellValue(m['parentAdminId'] as String? ?? ''),
           TextCellValue(m['department'] as String? ?? ''),
           TextCellValue(m['date'] as String? ?? ''),
@@ -2741,18 +2712,11 @@ class _AdminsTabState extends State<_AdminsTab> {
   Widget _adminCard(models.Document doc) {
     final data = doc.data;
     final name = data['name'] as String? ?? data['username'] as String? ?? '';
-    final role = data['role'] as String? ?? 'admin';
-    final isHierarchy = role == 'admin';
+    final isHierarchy = isHierarchyAdmin(data);
     final level = data['level'];
     final parent = data['parentAdminName'] as String? ?? data['parentAdminId'] as String?;
     final isDisabled = data['status'] == 'disabled';
-    const roleBadges = {
-      'officeAdmin': 'OA',
-      'eventAdmin': 'EA',
-      'hrAdmin': 'HR',
-      'securityAdmin': 'SA',
-    };
-    final avatarText = isHierarchy ? 'L${level ?? '?'}' : (roleBadges[role] ?? '?');
+    final avatarText = adminShortLabel(data);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
@@ -2779,7 +2743,7 @@ class _AdminsTabState extends State<_AdminsTab> {
                           fontSize: 14,
                           color: Colors.black87),
                       overflow: TextOverflow.ellipsis),
-                  Text(_roleLevelLabel(role, level),
+                  Text(adminLabel(data),
                       style: TextStyle(
                           fontSize: 11, color: Colors.grey.shade600)),
                   if (isHierarchy)
