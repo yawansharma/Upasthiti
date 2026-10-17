@@ -2,7 +2,7 @@
 
 ## Backend Provider: Appwrite
 
-upasthiti uses **Appwrite Cloud** as its sole backend. There is no custom server-side application code. All data operations, file storage, and realtime event delivery are handled entirely by Appwrite's managed cloud service running in the **Singapore region** (`sgp.cloud.appwrite.io`).
+upasthiti uses **Appwrite Cloud** as its sole backend. There is no custom server-side application code. All data operations, file storage, and realtime event delivery are handled entirely by Appwrite's managed cloud service running in the **Frankfurt region** (`fra.cloud.appwrite.io`).
 
 The choice of Appwrite as a BaaS eliminates the need to write, deploy, or maintain server infrastructure. All database access controls, file storage policies, and realtime subscriptions are configured through the Appwrite console.
 
@@ -24,7 +24,7 @@ All SDK instances are static — created once and shared across the entire appli
 ### Configuration Constants (non-sensitive)
 | Constant | Value |
 |---|---|
-| Endpoint | `https://sgp.cloud.appwrite.io/v1` |
+| Endpoint | `https://fra.cloud.appwrite.io/v1` |
 | Database ID | `6a2c10dc000d5e50f314` |
 | Profile Photos Bucket | `6a2c12a500260c940843` |
 | Attendance Photos Bucket | `attendance_photos` (by name) |

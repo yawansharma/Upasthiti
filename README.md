@@ -51,7 +51,7 @@ The product is structured around a strict **Role-Based Access Control (RBAC)** m
 | Layer | Technology | Purpose |
 |---|---|---|
 | **Frontend** | Flutter (Dart) | Cross-platform mobile & desktop UI |
-| **Backend-as-a-Service** | Appwrite Cloud (Singapore region) | Database, Storage, Realtime, Auth |
+| **Backend-as-a-Service** | Appwrite Cloud (Frankfurt region) | Database, Storage, Realtime, Auth |
 | **ML Inference** | Hugging Face Spaces (Python) | AI Face Recognition API |
 | **Database** | Appwrite NoSQL | Document-based storage |
 | **Realtime** | Appwrite Realtime (WebSocket) | Live attendance and message updates |
@@ -103,7 +103,7 @@ The product is structured around a strict **Role-Based Access Control (RBAC)** m
   └───────────────┘
 ```
 
-The application talks to a **single Appwrite project** running on the Singapore cloud region. The `AppwriteService` class (a Dart static singleton) initialises one `Client`, `Databases`, `Storage`, and `Realtime` instance that are shared by every screen in the app. Face recognition is handled by a separately hosted **Python microservice on Hugging Face Spaces**, contacted via HTTP multipart form requests.
+The application talks to a **single Appwrite project** running on the Frankfurt cloud region. The `AppwriteService` class (a Dart static singleton) initialises one `Client`, `Databases`, `Storage`, and `Realtime` instance that are shared by every screen in the app. Face recognition is handled by a separately hosted **Python microservice on Hugging Face Spaces**, contacted via HTTP multipart form requests.
 
 ---
 

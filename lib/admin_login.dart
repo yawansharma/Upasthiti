@@ -30,26 +30,7 @@ class _AdminLoginPageState extends State<AdminLoginPage>
   final captchaController = TextEditingController();
   bool _isObscure = true;
 
-<<<<<<< Updated upstream
-=======
-  // ── Derived helpers ────────────────────────────────────────────────────────
-  bool get _isSpecialRole => widget.isOfficeAdmin || widget.specialRole != null;
 
-  Color get _roleColor {
-    if (widget.isOfficeAdmin) return const Color(0xFF8A6A6A);
-    switch (widget.specialRole) {
-      case 'eventAdmin':
-        return const Color(0xFF3D6B8A);
-      case 'hrAdmin':
-        return const Color(0xFF8A7A2A);
-      case 'securityAdmin':
-        return const Color(0xFF8A2A2A);
-      default:
-        return AppTheme.kGreen;
-    }
-  }
-
->>>>>>> Stashed changes
   /// An admin needs first-login onboarding until it has completed it once.
   static bool _needsOnboarding(Map<String, dynamic> data) {
     final onboardedAt = data['presenceOnboardedAt'] as String?;
@@ -82,47 +63,7 @@ class _AdminLoginPageState extends State<AdminLoginPage>
     );
   }
 
-<<<<<<< Updated upstream
-=======
-  String get _badgeLabel {
-    if (widget.isOfficeAdmin) return "OFFICE ADMIN";
-    switch (widget.specialRole) {
-      case 'eventAdmin':
-        return "EVENT ADMIN";
-      case 'hrAdmin':
-        return "HR ADMIN";
-      case 'securityAdmin':
-        return "SECURITY ADMIN";
-      default:
-        if (widget.requiredLevel == 1) return "INSTITUTION ADMIN";
-        return "LEVEL ${widget.requiredLevel}";
-    }
-  }
 
-  String get _portalTitle {
-    if (widget.isOfficeAdmin) return "Office Admin Portal";
-    switch (widget.specialRole) {
-      case 'eventAdmin':
-        return "Event Admin Portal";
-      case 'hrAdmin':
-        return "HR Admin Portal";
-      case 'securityAdmin':
-        return "Security Admin Portal";
-      default:
-        if (widget.requiredLevel == 1) return "Institution Admin Portal";
-        return "Level ${widget.requiredLevel} Portal";
-    }
-  }
-
-  String get _portalSubtitle {
-    if (_isSpecialRole) {
-      return "${_portalTitle.replaceAll(' Portal', '')} credentials only.";
-    }
-    if (widget.requiredLevel == 1) return "Institution Admin credentials only.";
-    return "Only Level ${widget.requiredLevel} credentials are accepted here.";
-  }
-
->>>>>>> Stashed changes
   late AnimationController _controller;
   late Animation<double> _fadeAnim;
   late Animation<Offset> _slideAnim;
@@ -251,7 +192,6 @@ class _AdminLoginPageState extends State<AdminLoginPage>
         return;
       }
 
-<<<<<<< Updated upstream
       if (data['status'] == 'disabled') {
         _dismissAndShowError("Your account has been disabled. Please contact administration.");
         _generateCaptcha();
@@ -270,187 +210,15 @@ class _AdminLoginPageState extends State<AdminLoginPage>
         updateData['password'] = AppwriteService.hashPassword(password);
       }
       try {
-=======
-      if (widget.isOfficeAdmin) {
-        if (role != 'officeAdmin') {
-          _dismissAndShowError(
-            "Unauthorized. This portal is for Office Admins only.",
-          );
-          _generateCaptcha();
-          return;
-        }
-        if (data['status'] == 'disabled') {
-          _dismissAndShowError(
-            "Your account has been disabled. Please contact administration.",
-          );
-          _generateCaptcha();
-          return;
-        }
-        statusText.value = "Finalizing...";
-        // Auto-upgrade plaintext password to hashed
-        final updateData = <String, dynamic>{
-          'lastLogin': DateTime.now().toIso8601String(),
-        };
-        if (!AppwriteService.isHashed(storedPassword)) {
-          updateData['password'] = AppwriteService.hashPassword(password);
-        }
->>>>>>> Stashed changes
         await AppwriteService.databases.updateDocument(
           databaseId: AppwriteService.databaseId,
           collectionId: 'users',
           documentId: doc.$id,
           data: updateData,
         );
-<<<<<<< Updated upstream
       } catch (_) {
         // Non-critical for the Dean (as in the old Dean portal); fatal otherwise.
         if (kind != AdminKind.dean) rethrow;
-=======
-        // Trigger lazy background cleanup of old accounts
-        AppwriteService.cleanupInactiveAccounts();
-
-        if (!mounted) return;
-        Navigator.of(context).pop();
-        final adminDepartment = data['department'] as String? ?? '';
-        _navigateAfterLogin(
-          destination: OfficeAdminHomePage(
-            adminName: adminName,
-            adminId: adminId,
-            adminDepartment: adminDepartment,
-          ),
-          docId: doc.$id,
-          username: adminId,
-          name: adminName,
-          needsOnboarding: _needsOnboarding(data),
-        );
-      } else if (widget.specialRole != null) {
-        // ── Event / HR / Security Admin ───────────────────────────────
-        if (role != widget.specialRole) {
-          _dismissAndShowError(
-            "Unauthorized. This portal is for ${_portalTitle.replaceAll(' Portal', '')}s only.",
-          );
-          _generateCaptcha();
-          return;
-        }
-        if (data['status'] == 'disabled') {
-          _dismissAndShowError(
-            "Your account has been disabled. Please contact administration.",
-          );
-          _generateCaptcha();
-          return;
-        }
-        statusText.value = "Finalizing...";
-        // Auto-upgrade plaintext password to hashed
-        final updateData2 = <String, dynamic>{
-          'lastLogin': DateTime.now().toIso8601String(),
-        };
-        if (!AppwriteService.isHashed(storedPassword)) {
-          updateData2['password'] = AppwriteService.hashPassword(password);
-        }
-        await AppwriteService.databases.updateDocument(
-          databaseId: AppwriteService.databaseId,
-          collectionId: 'users',
-          documentId: doc.$id,
-          data: updateData2,
-        );
-        // Trigger lazy background cleanup of old accounts
-        AppwriteService.cleanupInactiveAccounts();
-
-        if (!mounted) return;
-        Navigator.of(context).pop();
-        final dept = data['department'] as String? ?? '';
-        Widget destination;
-        switch (widget.specialRole) {
-          case 'eventAdmin':
-            destination = EventAdminHomePage(
-              adminName: adminName,
-              adminId: adminId,
-            );
-            break;
-          case 'hrAdmin':
-            destination = HrAdminHomePage(
-              adminName: adminName,
-              adminId: adminId,
-              adminDepartment: dept,
-            );
-            break;
-          case 'securityAdmin':
-          default:
-            destination = SecurityAdminHomePage(
-              adminName: adminName,
-              adminId: adminId,
-            );
-        }
-        _navigateAfterLogin(
-          destination: destination,
-          docId: doc.$id,
-          username: adminId,
-          name: adminName,
-          needsOnboarding: _needsOnboarding(data),
-        );
-      } else {
-        // RBAC Security Check
-        if (role != 'admin') {
-          _dismissAndShowError(
-            "Unauthorized access. This portal is for Administrators only.",
-          );
-          _generateCaptcha();
-          return;
-        }
-
-        // ── Level enforcement ────────────────────────────────────────
-        final accountLevel = data['level'] is int ? data['level'] as int : 1;
-        if (accountLevel != widget.requiredLevel) {
-          _dismissAndShowError(
-            "These credentials belong to a Level $accountLevel account. "
-            "Please use the Level $accountLevel portal.",
-          );
-          _generateCaptcha();
-          captchaController.clear();
-          return;
-        }
-        // ────────────────────────────────────────────────────────────
-
-        // Check account status
-        if (data['status'] == 'disabled') {
-          _dismissAndShowError(
-            "Your admin account has been disabled. Please contact the Dean.",
-          );
-          _generateCaptcha();
-          return;
-        }
-
-        statusText.value = "Finalizing...";
-
-        // Auto-upgrade plaintext password to hashed
-        final updateData3 = <String, dynamic>{
-          'lastLogin': DateTime.now().toIso8601String(),
-        };
-        if (!AppwriteService.isHashed(storedPassword)) {
-          updateData3['password'] = AppwriteService.hashPassword(password);
-        }
-        await AppwriteService.databases.updateDocument(
-          databaseId: AppwriteService.databaseId,
-          collectionId: 'users',
-          documentId: doc.$id,
-          data: updateData3,
-        );
-
-        if (!mounted) return;
-        Navigator.of(context).pop();
-
-        _navigateAfterLogin(
-          destination: AdminHomePage(
-            adminName: adminName,
-            adminId: adminId,
-            adminLevel: accountLevel,
-          ),
-          docId: doc.$id,
-          username: adminId,
-          name: adminName,
-          needsOnboarding: _needsOnboarding(data),
-        );
->>>>>>> Stashed changes
       }
 
       // Trigger lazy background cleanup of old accounts (not on L1–L3 logins).
@@ -552,7 +320,6 @@ class _AdminLoginPageState extends State<AdminLoginPage>
                       letterSpacing: 1.2,
                     ),
                   ),
-<<<<<<< Updated upstream
                   IconButton(
                     onPressed: () => Navigator.pop(context),
                     icon: const Icon(Icons.close,
@@ -560,46 +327,6 @@ class _AdminLoginPageState extends State<AdminLoginPage>
                     tooltip: "Back to user login",
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
-=======
-                  Row(
-                    children: [
-                      // Level badge
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: _roleColor.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: _roleColor.withValues(alpha: 0.3),
-                          ),
-                        ),
-                        child: Text(
-                          _badgeLabel,
-                          style: TextStyle(
-                            color: _roleColor,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 11,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton(
-                        onPressed: () => Navigator.pop(context),
-                        icon: const Icon(
-                          Icons.close,
-                          color: Colors.white70,
-                          size: 20,
-                        ),
-                        tooltip: "Back to level select",
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                      ),
-                    ],
->>>>>>> Stashed changes
                   ),
                 ],
               ),
@@ -611,7 +338,6 @@ class _AdminLoginPageState extends State<AdminLoginPage>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-<<<<<<< Updated upstream
                   Text(
                     "Admin Portal",
                     style: AppTheme.headingWhite,
@@ -621,11 +347,6 @@ class _AdminLoginPageState extends State<AdminLoginPage>
                     "Sign in with your admin credentials.",
                     style: AppTheme.subheadingGrey,
                   ),
-=======
-                  Text(_portalTitle, style: AppTheme.headingWhite),
-                  const SizedBox(height: 8),
-                  Text(_portalSubtitle, style: AppTheme.subheadingGrey),
->>>>>>> Stashed changes
                 ],
               ),
             ),

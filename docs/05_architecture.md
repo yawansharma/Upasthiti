@@ -52,7 +52,7 @@ Four service singletons abstract all backend logic:
 - `AdminHierarchyService` — Resolves admin hierarchy relationships from class `boundary` JSON, resolves leave approvers, lists admins by level.
 
 ### Backend (Appwrite)
-Appwrite Cloud (Singapore region, `sgp.cloud.appwrite.io`) hosts:
+Appwrite Cloud (Frankfurt region, `fra.cloud.appwrite.io`) hosts:
 - **Databases**: A single database (`6a2c10dc000d5e50f314`) with multiple collections.
 - **Storage**: Three buckets (profile photos, attendance photos, community files).
 - **Realtime**: WebSocket connections for live data push.

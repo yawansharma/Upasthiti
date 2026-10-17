@@ -8,7 +8,7 @@ upasthiti is deployed as a **Flutter mobile application** with a **managed cloud
 
 ## Backend Deployment (Appwrite Cloud)
 
-The Appwrite backend is hosted on **Appwrite Cloud** (Singapore region). This is a fully managed service — no server provisioning, patching, or scaling configuration is required from the development team.
+The Appwrite backend is hosted on **Appwrite Cloud** (Frankfurt region). This is a fully managed service — no server provisioning, patching, or scaling configuration is required from the development team.
 
 **Appwrite Cloud handles**:
 - Database hosting and replication

@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
@@ -16,7 +16,7 @@ class _CameraPageState extends State<CameraPage> {
   void initState() {
     super.initState();
 
-    // ðŸ”´ SAFETY CHECK (Windows only)
+    // 🔴 SAFETY CHECK (Windows only)
     if (!Platform.isWindows) return;
 
     final controller = WebViewController()
@@ -132,7 +132,7 @@ class _CameraPageState extends State<CameraPage> {
   }
 }
 
-/// ðŸ”´ HTML with LIVE CAMERA (Slightly styled to ensure full fit)
+/// 🔴 HTML with LIVE CAMERA (Slightly styled to ensure full fit)
 const String _cameraHtml = """
 <!DOCTYPE html>
 <html>

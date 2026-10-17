@@ -1,9 +1,9 @@
-﻿import 'package:flutter/cupertino.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
-  // â”€â”€â”€ Brand Colors â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Brand Colors ──────────────────────────────────────────────────────────
   static const Color kGreen = Color(0xFF6A8A73);
   static const Color kGreenLight = Color(0xFFEAF0EC);
   static const Color kDark = Color(0xFF101010);
@@ -11,7 +11,7 @@ class AppTheme {
   static const Color kCard = Color(0xFFF9FAFB);
   static const Color kBorder = Color(0xFFE8EAED);
 
-  // â”€â”€â”€ ThemeData â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── ThemeData ─────────────────────────────────────────────────────────────
   static ThemeData light() {
     final base = ThemeData.light(useMaterial3: false);
     final poppins = GoogleFonts.poppinsTextTheme(base.textTheme);
@@ -26,7 +26,7 @@ class AppTheme {
       textTheme: poppins,
       primaryTextTheme: poppins,
 
-      // â”€â”€ AppBar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      // ── AppBar ──────────────────────────────────────────────────────────────
       appBarTheme: AppBarTheme(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -40,7 +40,7 @@ class AppTheme {
         actionsIconTheme: const IconThemeData(color: Colors.white),
       ),
 
-      // â”€â”€ ElevatedButton â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      // ── ElevatedButton ──────────────────────────────────────────────────────
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: kGreen,
@@ -57,7 +57,7 @@ class AppTheme {
         ),
       ),
 
-      // â”€â”€ TextButton â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      // ── TextButton ──────────────────────────────────────────────────────────
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: kGreen,
@@ -68,7 +68,7 @@ class AppTheme {
         ),
       ),
 
-      // â”€â”€ InputDecoration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      // ── InputDecoration ─────────────────────────────────────────────────────
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: Colors.white,
@@ -94,7 +94,7 @@ class AppTheme {
         ),
       ),
 
-      // â”€â”€ BottomNavigationBar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      // ── BottomNavigationBar ─────────────────────────────────────────────────
       bottomNavigationBarTheme: BottomNavigationBarThemeData(
         backgroundColor: Colors.white,
         selectedItemColor: kGreen,
@@ -108,7 +108,7 @@ class AppTheme {
         unselectedLabelStyle: GoogleFonts.poppins(fontSize: 11),
       ),
 
-      // â”€â”€ SnackBar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      // ── SnackBar ────────────────────────────────────────────────────────────
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
         backgroundColor: const Color(0xFF2D2D2D),
@@ -117,7 +117,7 @@ class AppTheme {
             GoogleFonts.poppins(color: Colors.white, fontSize: 13),
       ),
 
-      // â”€â”€ Dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      // ── Dialog ──────────────────────────────────────────────────────────────
       dialogTheme: DialogThemeData(
         shape:
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -130,7 +130,7 @@ class AppTheme {
             GoogleFonts.poppins(color: Colors.black54, fontSize: 14),
       ),
 
-      // â”€â”€ Smooth Page Transitions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      // ── Smooth Page Transitions ──────────────────────────────────────────
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
           TargetPlatform.android: CupertinoPageTransitionsBuilder(),
@@ -143,7 +143,7 @@ class AppTheme {
     );
   }
 
-  // â”€â”€â”€ Shared InputDecoration factory â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Shared InputDecoration factory ────────────────────────────────────────
   /// Replaces all the duplicate `_modernInput()` helpers across the app.
   /// Pass [suffix] for things like a password-visibility toggle.
   static InputDecoration inputDecoration(
@@ -182,7 +182,7 @@ class AppTheme {
     );
   }
 
-  // â”€â”€â”€ Shared Text Styles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Shared Text Styles ─────────────────────────────────────────────────────
   static TextStyle get headingWhite => GoogleFonts.poppins(
         color: Colors.white,
         fontSize: 32,
@@ -205,7 +205,7 @@ class AppTheme {
         color: Colors.grey,
       );
 
-  // â”€â”€â”€ Shared Decorations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Shared Decorations ─────────────────────────────────────────────────────
   /// The rounded white/light sheet used at the bottom of dark-header pages.
   static BoxDecoration get bottomSheet => const BoxDecoration(
         color: kSurface,
@@ -227,7 +227,7 @@ class AppTheme {
 }
 
 // =============================================================================
-// RisingSheet â€” wraps the white content area with the signature bottom-to-top
+// RisingSheet — wraps the white content area with the signature bottom-to-top
 // slide + fade entrance animation used consistently across all app screens.
 // =============================================================================
 class RisingSheet extends StatefulWidget {

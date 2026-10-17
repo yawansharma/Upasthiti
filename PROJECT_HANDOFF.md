@@ -181,7 +181,7 @@ Flutter Client (Mobile/Desktop/Web)
          ↓
    Appwrite SDK (v23.1.0)
          ↓
-Appwrite Cloud (Singapore: sgp.cloud.appwrite.io)
+Appwrite Cloud (Singapore: fra.cloud.appwrite.io)
   ├── Databases (NoSQL collections)
   ├── Storage (profile photos, attendance selfies, community files)
   └── Realtime (WebSocket subscriptions)
@@ -303,7 +303,7 @@ None. All operations are synchronous request/response or live Realtime subscript
 ## Backend
 | Technology | Purpose | Version/Config |
 |---|---|---|
-| Appwrite | Backend-as-a-Service (NoSQL DB, Storage, Realtime) | SDK ^23.1.0, Singapore region |
+| Appwrite | Backend-as-a-Service (NoSQL DB, Storage, Realtime) | SDK ^23.1.0, Frankfurt region |
 | Hugging Face Spaces | ML face recognition inference (Python backend) | Custom space: pasteshub404-navikarana-backend |
 
 ## Key Flutter Packages
@@ -340,7 +340,7 @@ None. All operations are synchronous request/response or live Realtime subscript
 | flutter_launcher_icons | Generates app launcher icons for all platforms |
 
 ## Infrastructure
-- Appwrite Cloud (Singapore region, shared hosting)
+- Appwrite Cloud (Frankfurt region, shared hosting)
 - Hugging Face Spaces (free tier — cold start delays possible)
 - No custom server infrastructure; fully BaaS
 
@@ -352,7 +352,7 @@ None. All operations are synchronous request/response or live Realtime subscript
 
 ### Appwrite
 ```
-Endpoint:   https://sgp.cloud.appwrite.io/v1
+Endpoint:   https://fra.cloud.appwrite.io/v1
 Project ID: 6a2c0bd800121a164e77
 Database ID: 6a2c10dc000d5e50f314
 Profile/File Bucket: 6a2c12a500260c940843
@@ -1331,7 +1331,7 @@ git push origin eventhandle2
 # 21. Executive Summary For New Claude
 
 ## What This Project Is
-**Navikarana/Upasthiti** is a Flutter-based AI attendance management system for educational institutions. It uses face recognition (Hugging Face ML backend) and GPS geofencing to verify student presence. It has a 4-level admin hierarchy (Dean → L1 → L2 → L3 + Office Admin), with each level having different visibility and management capabilities. The backend is Appwrite (NoSQL, Singapore cloud). The current development branch is `eventhandle2`.
+**Navikarana/Upasthiti** is a Flutter-based AI attendance management system for educational institutions. It uses face recognition (Hugging Face ML backend) and GPS geofencing to verify student presence. It has a 4-level admin hierarchy (Dean → L1 → L2 → L3 + Office Admin), with each level having different visibility and management capabilities. The backend is Appwrite (NoSQL, Frankfurt cloud). The current development branch is `eventhandle2`.
 
 ## Current Status (~72% Complete)
 The core attendance, messaging, leave management, and admin hierarchy systems are working. The most recently completed work added org chart visualization, student directory/invite tools, and the Office Admin dashboard module. **The Office Admin page is fully built but not yet wired into routing** — this is the immediate blocking task.

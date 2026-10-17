@@ -19,7 +19,7 @@ const DEST_DATABASE_ID = "6ac510390009fba397c7";
 // ============================================================
 
 const sourceClient = new sdk.Client()
-    .setEndpoint("https://sgp.cloud.appwrite.io/v1")
+    .setEndpoint("https://fra.cloud.appwrite.io/v1")
     .setProject(SOURCE_PROJECT_ID)
     .setKey(SOURCE_API_KEY);
 

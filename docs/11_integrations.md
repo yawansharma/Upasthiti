@@ -3,7 +3,7 @@
 ## 1. Appwrite Cloud
 
 **Type**: Backend-as-a-Service (BaaS)  
-**Region**: Singapore (`sgp.cloud.appwrite.io`)  
+**Region**: Singapore (`fra.cloud.appwrite.io`)  
 **SDK**: `appwrite: ^23.1.0`
 
 Appwrite provides the entire backend infrastructure:
