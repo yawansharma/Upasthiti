@@ -51,7 +51,7 @@ class _HrAdminHomePageState extends State<HrAdminHomePage> {
             AdminPresenceCard(
               adminId: widget.adminId,
               adminName: widget.adminName,
-              role: 'hrAdmin',
+              role: 'admin',
               level: 0,
               department: widget.adminDepartment,
               accent: _kHRAccent,

@@ -4,8 +4,8 @@ import 'forgot_password_page.dart';
 import 'package:flutter/material.dart';
 import 'home_page.dart';
 import 'register_page.dart';
-import 'admin_level_select_page.dart';
-import 'dean_login.dart';
+import 'admin_login.dart';
+import 'services/admin_roles.dart';
 import 'app_theme.dart';
 import 'package:appwrite/appwrite.dart';
 import 'services/appwrite_service.dart'; // or correct path
@@ -146,22 +146,6 @@ class _LoginPageState extends State<LoginPage> {
   final passwordController = TextEditingController();
   bool _isObscure = true;
 
-  int _secretTapCount = 0;
-  Timer? _secretTimer;
-
-  void _handleSecretTap() {
-    _secretTapCount++;
-    if (_secretTapCount == 5) {
-      // Haptic feedback could be added here if vibrator is available
-      setState(() {});
-    }
-    _secretTimer?.cancel();
-    _secretTimer = Timer(const Duration(seconds: 2), () {
-      _secretTapCount = 0;
-      if (mounted) setState(() {});
-    });
-  }
-
   @override
   void initState() {
     super.initState();
@@ -240,8 +224,7 @@ class _LoginPageState extends State<LoginPage> {
       final data = response.documents.first.data;
 
       // RBAC Security Check
-      final role = data['role'] as String?;
-      if (role == 'admin' || role == 'dean') {
+      if (adminKindOf(data) != AdminKind.notAdmin) {
         _dismissDialogAndShow(
           statusText,
           "Unauthorized access. Use the correct portal.",
@@ -328,23 +311,20 @@ class _LoginPageState extends State<LoginPage> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            GestureDetector(
-                              onTap: _handleSecretTap,
-                              child: const Text(
-                                "upasthiti",
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 18,
-                                  letterSpacing: 1.2,
-                                ),
+                            const Text(
+                              "upasthiti",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                                letterSpacing: 1.2,
                               ),
                             ),
                             TextButton.icon(
                               onPressed: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) => const AdminLevelSelectPage(),
+                                  builder: (_) => const AdminLoginPage(),
                                 ),
                               ),
                               icon: const Icon(
@@ -542,45 +522,6 @@ class _LoginPageState extends State<LoginPage> {
                                   ),
                                 ),
                                 const SizedBox(height: 40),
-                                if (_secretTapCount >= 5)
-                                  Padding(
-                                    padding: const EdgeInsets.only(bottom: 20),
-                                    child: ElevatedButton.icon(
-                                      onPressed: () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (_) =>
-                                                const DeanLoginPage(),
-                                          ),
-                                        );
-                                      },
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: const Color(
-                                          0xFF1A1C29,
-                                        ),
-                                        foregroundColor: const Color(
-                                          0xFFD4AF37,
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                        ),
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 20,
-                                          vertical: 12,
-                                        ),
-                                      ),
-                                      icon: const Icon(Icons.shield, size: 16),
-                                      label: const Text(
-                                        "Super Admin Portal",
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
                                 const SizedBox(height: 20),
                               ],
                             ),

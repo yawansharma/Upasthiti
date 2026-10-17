@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'app_theme.dart';
 import 'main.dart';
 import 'services/appwrite_service.dart';
+import 'services/admin_roles.dart';
 import 'components/user_avatar.dart';
 import 'components/admin_presence_card.dart';
 
@@ -43,9 +44,9 @@ class _SecurityAdminHomePageState extends State<SecurityAdminHomePage> {
             AdminPresenceCard(
               adminId: widget.adminId,
               adminName: widget.adminName,
-              role: 'securityAdmin',
+              role: 'admin',
               level: 0,
-              department: '',
+              department: kDeptSecurity,
               accent: _kSAAccent,
               requiresLogoutVerification: true,
               onSignedOut: () {
@@ -866,13 +867,7 @@ class _AccessControlTabState extends State<_AccessControlTab> {
     if (_roleFilter != 'all') {
       if (_roleFilter == 'admin') {
         list = list
-            .where((d) =>
-                d.data['role'] == 'admin' ||
-                d.data['role'] == 'dean' ||
-                d.data['role'] == 'officeAdmin' ||
-                d.data['role'] == 'eventAdmin' ||
-                d.data['role'] == 'hrAdmin' ||
-                d.data['role'] == 'securityAdmin')
+            .where((d) => adminKindOf(d.data) != AdminKind.notAdmin)
             .toList();
       } else if (_roleFilter == 'student') {
         list = list
@@ -1071,37 +1066,32 @@ class _AccessControlTabState extends State<_AccessControlTab> {
     final d = doc.data;
     final name = d['name'] as String? ?? '—';
     final username = d['username'] as String? ?? '—';
-    final role = d['role'] as String? ?? 'student';
     final status = d['status'] as String? ?? 'active';
     final isDisabled = status == 'disabled';
 
-    Color roleColor;
-    String roleLabel;
-    switch (role) {
-      case 'admin':
-      case 'dean':
-        roleColor = const Color(0xFF7A6A8A);
-        roleLabel = role == 'dean' ? 'Dean' : 'Admin';
-        break;
-      case 'officeAdmin':
-        roleColor = const Color(0xFF8A6A6A);
-        roleLabel = 'Office';
-        break;
-      case 'eventAdmin':
-        roleColor = const Color(0xFF3D6B8A);
-        roleLabel = 'Events';
-        break;
-      case 'hrAdmin':
-        roleColor = const Color(0xFF8A7A2A);
-        roleLabel = 'HR';
-        break;
-      case 'securityAdmin':
-        roleColor = _kSAAccent;
-        roleLabel = 'Security';
-        break;
-      default:
+    final kind = adminKindOf(d);
+    final Color roleColor;
+    final String roleLabel;
+    switch (kind) {
+      case AdminKind.notAdmin:
         roleColor = AppTheme.kGreen;
         roleLabel = 'Student';
+        break;
+      case AdminKind.hierarchy:
+        roleColor = adminColor(d);
+        roleLabel = 'Admin';
+        break;
+      case AdminKind.event:
+        roleColor = adminColor(d);
+        roleLabel = 'Events';
+        break;
+      case AdminKind.dean:
+        roleColor = const Color(0xFF7A6A8A);
+        roleLabel = 'Dean';
+        break;
+      default:
+        roleColor = adminColor(d);
+        roleLabel = functionalDeptOf(d) ?? 'Admin';
     }
 
     return Container(
